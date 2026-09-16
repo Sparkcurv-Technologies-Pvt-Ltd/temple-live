@@ -210,3 +210,19 @@ venv/
 
 # Node
 node_modules/
+
+# Django local/production settings containing secrets
+backend/temple_proj/settings/dev.py
+backend/temple_proj/settings/pro.py
+backend/temple_proj/settings/test.py
+
+# Editor swap files
+*.swp
+*.swo
+*.swn
+*.swm
+*.swx
+
+# Environment secrets
+.env
+.env.*
