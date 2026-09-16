@@ -1,0 +1,29 @@
+{
+  "summary": "Verified the client-side Principal Pay Amt <= Principal Amt guardrail on the Collection form (Collection Details -> Collection). Negative case (Chit Interest / Installment Interest / borrower INT118 with Principal Amt=Rs.17000, Installment Amt=Rs.1000, No Of Count=50 => Principal Pay Amt=50000) triggers the inline error 'Principal Pay Amt (Rs. 50000) cannot exceed Principal Amt (Rs. 17000)' under the Principal Pay Amt field, shows warn toast 'Please fill in all the required details !', and the POST /api/collection/add_collection_details/ NEVER fires. Positive case (same borrower, No Of Count=5 => Principal Pay Amt=5000 <= 17000) submits successfully, POST fires and success toast 'Create or modify data successfully.' appears. The AntD Form rule validator at Collection.jsx L2117-2137 works as designed and correctly reads the hidden _original_principal_amt field (17000) even after handlePricipalPay recomputes visible principal_amt to 0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Collection form (Installment Amt Details)", "issues": ["No data-testid attributes on the four key fields (Principal Amt, Installment Amt, No Of Count, Principal Pay Amt). E2E currently keys off antd ids #AddCollection_principal_amt / _installment_amt / _no_count_install / _amount. Adding data-testid='collection-no-of-count' etc. would make future automation stable.", "The visible 'Principal Amt' input recomputes to 0 the moment the user overshoots (handlePricipalPay likely does principal_balance - paid and clamps at 0). This UX is confusing because the inline error still references Rs. 17000 (from the hidden _original_principal_amt). Consider not clamping the display field to 0 when validation is failing, or explicitly show 'Outstanding: 17000'."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL UX: When Principal Pay Amt > Original Principal Amt, do not overwrite the visible Principal Amt to 0 (handlePricipalPay in Collection.jsx). It contradicts the error text which still says 'Principal Amt (Rs. 17000)'. Keep the visible Principal Amt = outstanding until the pay amount is valid.",
+    "OPTIONAL: Add data-testid to the four Installment Amt Details inputs and the Submit button for stable regression tests."
+  ],
+  "critical_code_review_comments": [
+    "Collection.jsx L2117-2137 & L2148-2165: validator correctly reads getFieldValue('_original_principal_amt') and rejects paid > orig. The _original_principal_amt hidden state is seeded from PlaceFindMem?.principal_balance (L1170) — verified DOM value = 17000 matches borrower's outstanding. Guardrail effective for both Installment and non-Installment code branches.",
+    "Collection.jsx onFinishFailed shows a generic 'Please fill in all the required details !' toast — user must scroll to see the actual field-level error. Consider surfacing the specific validation message in the toast (or scroll to first error field) for a11y.",
+    "Collection form: the visible 'Principal Amt' field is a *derived* value (outstanding - paid). Because it's the same fieldName as the pre-fill (principal_amt), the user has no lasting visibility of the original principal after the calc runs. The hidden _original_principal_amt fixes the validation problem but the UX is misleading. Suggest a separate read-only 'Outstanding Principal' label."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only run)", "frontend": "100% (2/2 scenarios pass: negative block + positive submit)"},
+  "test_credentials": "admin@gmail.com / Admin@123",
+  "seed_data_creation": "One test collection was created in the positive case for borrower INT118 (Principal Pay Amt=5000, category=Chit Interest, Installment Interest). Main agent may wish to remove this seed row via /api/collection admin tools if a clean state is required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route to the form: /collection (NOT /collectiondetails/collection which 404s — verified). Direct URL nav works. Field ids under AddCollection_* form. To reach Installment Amt Details section: Category=Chit Interest -> Chit Name=CHIT1 / AMMAN FINANCE -> click 'Principal' radio (labelled 'Installment Amount' after chit select) -> Interest Category=Installment Interest -> Choose Person (only 2 borrowers for AMMAN chit under Installment Interest: INT118 and INT228; 'Sheela' referenced in the review request is NOT present in the dataset — INT118 has principal_balance=17000, installment_amt=1000). No Of Count input id = AddCollection_no_count_install. Principal Pay Amt (readonly, auto = installment*count) id = AddCollection_amount. Hidden validator field = _original_principal_amt seeded from PlaceFindMem.principal_balance.",
+  "rca of the issue": "Not a bug — verification-only run. Validator implementation at Collection.jsx L2110-2168 correctly blocks submission when Principal Pay Amt > original Principal Amt. Confirmed by: (a) inline red error appears under Principal Pay Amt with exact expected text, (b) network tab shows POST /api/collection/add_collection_details/ is NOT fired on invalid submit, (c) onFinishFailed triggers the warn toast, and (d) valid submit (5000<=17000) does fire POST and returns success."
+}

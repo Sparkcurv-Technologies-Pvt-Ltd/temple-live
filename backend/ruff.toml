@@ -1,0 +1,51 @@
+# Exclude vendor packages, migrations, and backup files from linting
+exclude = [
+    "venv310",
+    "venv310_unused",
+    ".venv",
+    "venv_unused",
+    "temple_proj/venv",
+    "temple_proj/venv_unused",
+    "**/venv310/**",
+    "**/venv_unused/**",
+    "*/migrations/*",
+    "__pycache__",
+    "*.pyc",
+    "*.bak",
+]
+
+[lint]
+# F403/F405: star imports are an architectural pattern throughout this codebase.
+# F811: duplicate imports - being cleaned up progressively.
+# F821: undefined names - venv packages have Python 2 compat code.
+# BLE001: broad exception catching is used for graceful error handling throughout.
+# F401: unused imports exist in many legacy views.
+# DTZ*: datetime timezone strictness - legacy codebase uses naive datetimes.
+# S110: try-except-pass with print logging is the existing pattern.
+# F841: unused variables exist in legacy views.
+# I001: import sorting is not enforced in this codebase.
+# PIE790/PIE794: unnecessary pass and duplicate class fields.
+# RUF*: Ruff-specific suggestions not applicable to this codebase.
+# SIM*: code simplification suggestions - would require major refactoring.
+# UP*: upgrade suggestions - codebase targets Python 3.8+ compatibility.
+# FURB*: refurb suggestions not applicable.
+# A4: variable shadowing is used intentionally.
+# PLR2044: empty comments used as section separators.
+# F541: f-strings without placeholders.
+ignore = [
+    "F403", "F405", "F811", "F821",
+    "BLE001",
+    "F401", "F841",
+    "DTZ001", "DTZ002", "DTZ003", "DTZ004", "DTZ005", "DTZ006", "DTZ007", "DTZ011",
+    "S110", "S112",
+    "I001",
+    "PIE790", "PIE794",
+    "EXE001", "B018", "B023",
+    "RUF012", "RUF100", "RUF046", "RUF010", "RUF059",
+    "SIM102", "SIM114", "SIM118", "SIM222",
+    "UP008", "UP018", "UP031", "UP034",
+    "FURB157",
+    "A004",
+    "PLR2044",
+    "F541",
+]

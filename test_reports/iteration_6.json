@@ -1,0 +1,51 @@
+{
+  "summary": "Verified the new income_subcategory feature end-to-end. Added /app/backend/tests/test_income_subcategory.py mirroring test_expense_subcategory.py (8 tests, all passing in isolation). Frontend E2E confirms the required 'Subcategory' select renders at the top of /add_income form with the two options ('Chit Fund Income', 'Temple Income') and data-testid='income-subcategory-select' is present on the DOM (CustomSelect.jsx now correctly forwards data-testid — a regression fix from iteration 5). One environment issue was uncovered and fixed: income migration 0002_addincomedetails_income_subcategory.py existed on disk but was NOT applied to MariaDB, causing all POST/BS endpoints to 500. Ran migrate income and endpoints started working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "N/A (test infra)",
+        "issue": "Running the full backend/tests/ suite together produces 500 errors on income/expense/balancesheet endpoints. Root cause: pytest test collection imports test_chit_fund_settlement_concrete.py & test_chit_fund_settlement_redistribution.py which do django.setup() and call the ORM directly during import (module-level side effects at lines 42-43 and 20-21). This appears to leave the MariaDB connection or table state in a way that breaks subsequent HTTP-based tests hitting expense/income/balancesheet endpoints. Running each file in isolation passes 8/8 for the new test. Not a product bug — it's a test-suite hygiene issue that pre-dates this iteration (same behaviour was described in iteration 5 note). Recommend main agent guard django.setup() behind a fixture or add pytest markers so those two files don't run together with HTTP-based tests. Individual runs: test_income_subcategory 8/8 PASS, test_expense_subcategory 8/8 PASS (verified separately in iteration 5)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_income_subcategory.py",
+    "/app/test_reports/pytest/income_subcategory.xml",
+    "/app/test_reports/pytest/full_suite.xml"
+  ],
+  "action_items": [
+    "RESOLVED-INFRA: Applied missing income migration (0002_addincomedetails_income_subcategory) via `python manage.py migrate income`. Environment now consistent.",
+    "OPTIONAL: Refactor test_chit_fund_settlement_concrete.py and test_chit_fund_settlement_redistribution.py to defer django.setup() into fixtures so the full pytest suite can run together without state interference.",
+    "OPTIONAL (from iteration 5 carry-over): CustomSelect.jsx `data-testid` now DOES reach the DOM for the income form (`[data-testid='income-subcategory-select']` selectable in Playwright). If iteration 5's action item to fix CustomSelect was completed, that's confirmed working."
+  ],
+  "critical_code_review_comments": [
+    "balancesheet/views.py: `dic['Chit_Fund_Income']` is only added when total>0 (conditional key). Same optional-key pattern flagged in iteration 5 for Chit_Fund_Expense — API consumers must branch on presence. Consider always emitting the key with total_amount=0 for a stable response schema.",
+    "balancesheet/views.py L6272 and L6508: net balance formula adds `chit_income_total` on both credit side AND net calc — verified numerically correct (Credit + = extra income, so net positive).",
+    "balancesheet/views.py: Chit Fund income uses `created_at__date` for filtering (Report created_at) whereas Chit Fund Expense uses `date` field. Inconsistent — the income model DOES have a `date` DateField (line 98 of income/models.py) but the balance sheet uses created_at. If a user backdates an income entry, it will still be included on the day it was created, not the entered date. Recommend main agent align: use `date` field consistently for both (as expense does) — OR document this asymmetry.",
+    "income/models.py L44-47: INCOME_SUBCATEGORY_CHOICES defined at module level — consistent with expense. Field is `null=True, blank=True` allowing legacy NULL rows.",
+    "test infra: 2 unapplied migrations (income 0002) were sitting on disk without being reflected in DB. Whatever seed/reset flow is in place should call `manage.py migrate` unconditionally after loading temple_db.sql.",
+    "AddIncome.jsx: The Subcategory select is required but form initialization for edit flow doesn't set an initial income_subcategory (legacy rows are NULL). PUT/edit flow may silently fail validation. Verify or make optional for edit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_income_subcategory.py (new — 8 tests, 250 lines, mirrors test_expense_subcategory.py)",
+    "/app/test_reports/pytest/income_subcategory.xml (generated)",
+    "/app/test_reports/pytest/full_suite.xml (generated)",
+    "Applied DB migration: income.0002_addincomedetails_income_subcategory"
+  ],
+  "success_rate": {
+    "backend": "100% for scope (8/8 new income tests pass in isolation, all 6 review-request cases covered: POST chit=700 → 201, POST temple=400 → 201, POST invalid → 400 with 'is not a valid choice', GET list has income_subcategory, chit-fund BS custom_date_range with Chit_Fund_Income=700, chit-fund BS custom_date with Chit_Fund_Income=700, Temple BS excludes Chit=700 and includes Temple=400, legacy NULL regression for date 2024-04-07 → cash_amount=26193)",
+    "frontend": "100% (Subcategory select renders at top of /add_income form, both options present, data-testid on DOM, form ready for submit)"
+  },
+  "test_credentials": "admin@gmail.com / Admin@123 (JWT sent raw in Authorization header, no Bearer prefix). Login endpoint: POST /api/user/login.",
+  "seed_data_creation": "The pytest fixture in test_income_subcategory.py creates 2 rows in income_addincomedetails for TODAY (700 Chit Fund + 400 Temple, both Offline/Cash, category=1, income=1) and the corresponding Report rows. Fixture cleans up on setup AND teardown. Legacy regression uses fixed date 2024-04-07 which has 6 NULL-subcategory cash income rows summing to 26193 (verified via `SELECT ... WHERE income_subcategory IS NULL AND DATE(created_at)='2024-04-07'`).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "IMPORTANT: run `python manage.py migrate` before any HTTP-based tests — the DB in this preview environment lacked the income.0002 migration on start. Chit Fund Balance Sheet response conditionally includes `Credit.Chit_Fund_Income` (omitted when 0). Chit Fund income aggregation filters on `created_at__date` (not `date`), so entries backdated via the `date` field will still count on their creation day — flag this if the main agent extends the feature. Data-testid `income-subcategory-select` DOES reach the DOM (CustomSelect.jsx {...rest} forwarding is working, unlike iteration 5's expense-subcategory-select). Full backend/tests/ suite has cross-test interference issues from settlement redistribution tests that call django.setup() at import time — run test_income_subcategory.py standalone or use `-p no:cacheprovider` to see clean results.",
+  "rca of the issue": "PRIMARY RCA: The income.0002 migration file existed on disk but had NOT been applied to the temple MariaDB, so INSERT into income_addincomedetails failed with '(1054, Unknown column income_subcategory in INSERT INTO)' — every income POST and every balancesheet_chitfundview call 500-ed. Fixed by running `DJANGO_SETTINGS_MODULE=temple_proj.settings.settings python manage.py migrate income`. Secondary: initial 500s were masked because Django DEBUG=False returns a bare 500 HTML without the traceback in stderr — had to temporarily enable DEBUG=True to see the SQL error text and identify the missing migration. Reverted DEBUG=False after."
+}

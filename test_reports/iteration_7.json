@@ -1,0 +1,43 @@
+{
+  "summary": "Verified the Percentage-penalty cap-at-100% bug fix on both backend and frontend. Added regression suite /app/backend/tests/test_festival_percentage_cap.py (9 tests, all PASS). Frontend E2E on the Add Festival form confirms the validator triggers on the unit '%' with penalty=101 (inline red error 'Penalty percentage cannot exceed 100%', submit blocked) and that switching to '₹' (Amount) with penalty=500 submits successfully (success toast + form reset).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Add Festival form", "issues": ["Penalty inputs (penalty_amt & unit select) have no data-testid — E2E currently keyed off antd-generated ids '#AddFestival_penalty_amt' and CSS '.ant-input-group-addon .ant-select-selector'. Suggest adding data-testid='festival-penalty-amt' and 'festival-penalty-unit-select' for stable automation."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_festival_percentage_cap.py",
+    "/app/test_reports/pytest/festival_percentage_cap.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Add data-testid attributes to the Penalty input and its addonAfter Select in AddFestival.jsx for future frontend tests.",
+    "OPTIONAL: The SetFestivalDetails() legacy branch (lines 79-85 of AddFestival.jsx) still contains 'if (updatefestivallist?.penalty_amt > 100) { form.setFieldsValue({choice:'Amount'}) }'. This is dead / misleading now that Percentage>100 is banned server-side — it silently mutates 'choice' from Percentage to Amount on edit-open when loading a legacy row with penalty_amt>100. Should be removed or scoped to legacy cleanup only.",
+    "OPTIONAL: handlePenalty() in AddFestival.jsx now unconditionally calls setDisablePenalty(false) in both branches (lines 114-118) — dead code, can be simplified."
+  ],
+  "critical_code_review_comments": [
+    "serializers.py L88-98: The cap check correctly reads self.instance for partial updates. Good. Uses float(penalty_amt) — safe because penalty_amt is a Decimal here. No off-by-one: uses '> 100' so 100 (and 100.00) is allowed and 100.5/101 rejected — matches spec.",
+    "serializers.py validate(): if end_date is None (missing on partial PATCH) the 'end_date <= start_date' check will TypeError. Currently PATCH always passes both dates via views.py, but the serializer alone isn't safe. Consider `if start_date and end_date and end_date <= start_date`.",
+    "views.py add_festival_details L40 & edit_festival_details L124: permission expression `get_role=='User' and perm.festival_add ==True or get_role=='Admin' or ...` — operator precedence works but is fragile; a User with no permissions row would raise UnboundLocalError on 'perm' since perm is only set inside the `if rejin.my_role!=None` branch. Not exposed by these tests (admin path), but a latent bug.",
+    "views.py L91: on POST validation failure, returns serializer876.errors verbatim — includes the {'penalty_amt': [...]} key which the frontend does NOT explicitly toast (only end_date/start_date/non_field_errors are surfaced in AddFestival.jsx catch). The inline form validator handles the UX today, but if the frontend rule were ever bypassed, the toast would just say 'Add Failed'. Consider adding penalty_amt to the toast branches (line 138-147 of AddFestival.jsx).",
+    "AddFestival.jsx L79-85: dead / confusing branch that silently swaps 'Percentage' -> 'Amount' when loading an edit form for a legacy row with penalty_amt>100. Explicit user action should be required."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_festival_percentage_cap.py (new — 9 tests: 3 reject cases + 3 allow cases + 1 amount-uncapped + 2 edit-path cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest tests pass — 101/200/100.5 rejected with 'penalty_amt' error key; 50/99/100 allowed; Amount 500 allowed; PUT edit with Percentage/150 rejected; PUT edit with Amount/750 succeeds)",
+    "frontend": "100% (inline validator blocks Percentage 101 with 'Penalty percentage cannot exceed 100%' error near the field; switching to ₹ Amount 500 posts and returns 201 with success toast)"
+  },
+  "test_credentials": "admin@gmail.com / Admin@123 (JWT sent raw in Authorization header, no Bearer prefix). Login: POST /api/user/login.",
+  "seed_data_creation": "Backend test fixtures create festivals named TEST_BugP99/TEST_BugP100/TEST_BugP50/TEST_BugA500/TEST_BugEditP50/TEST_BugEditAmt and DELETE them at end of each test. Frontend E2E created TEST_UI_A500 which was cleaned up post-run via DELETE /api/festival/edit_festival_details/{id}/.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The cap rule is enforced in ADDFestivalDetailsSerializer.validate() (serializers.py L88-98) — reads self.instance fallback so PUT/PATCH with omitted 'choice' or 'penalty_amt' still enforces the cap using the stored value. The frontend uses an antd Form rule validator on the CustomInputNumber; the unit-select is CustomSelect with name='choice' and lives inside addonAfter (renders as '.ant-input-group-addon .ant-select-selector'). Boundary of 100 IS allowed (uses strict >). Fractional 100.5 IS rejected. Amount mode is uncapped (500 works). Form ids: #AddFestival_festival_name, _tax_per_head, _start_date, _end_date, _penalty_amt.",
+  "rca of the issue": "PRE-FIX: The serializer only guarded start_date/end_date; percentage-mode penalties >100 were accepted, causing PeoplesAmountDetails.penalty_amount to be computed as tax_per_head * (>1.0) — i.e. a >100% penalty. FIX APPLIED (by main agent, verified here): added in validate(): resolve choice/penalty_amt with self.instance fallback, then `if choice=='Percentage' and float(penalty_amt) > 100: raise ValidationError({'penalty_amt': 'Penalty percentage cannot exceed 100%.'})`. Frontend added a matching antd rule.validator on penalty_amt; the previous silent auto-conversion to 'Amount' when value>100 was removed. All 9 pytest cases + full frontend E2E confirm correct behavior."
+}

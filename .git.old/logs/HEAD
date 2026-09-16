@@ -1,0 +1,27 @@
+0000000000000000000000000000000000000000 01314d2b420cd72e3c5371ac161ea3993202b7d6 root <root@sparkcurv.(none)> 1787633208 +0200	clone: from https://github.com/kesari4416/fund-temple.git
+01314d2b420cd72e3c5371ac161ea3993202b7d6 420b1a6c549c2d187ef4fc3fd2fa40fca65a3e8d root <root@sparkcurv.(none)> 1787637052 +0200	pull: Fast-forward
+420b1a6c549c2d187ef4fc3fd2fa40fca65a3e8d 74f2c8ebd4a181c89f2de5b9c612194e42bd999c root <root@sparkcurv.(none)> 1787939571 +0200	pull: Fast-forward
+74f2c8ebd4a181c89f2de5b9c612194e42bd999c 3fa88ee9a05713b87690476710b1f65b13a78b0a root <root@sparkcurv.(none)> 1788207539 +0200	pull: Fast-forward
+3fa88ee9a05713b87690476710b1f65b13a78b0a c75ffe3df5de9220f3481330e98c49f34f8ef573 root <root@sparkcurv.(none)> 1788208183 +0200	pull: Fast-forward
+c75ffe3df5de9220f3481330e98c49f34f8ef573 52926025e245dd206af09b2a20cbe5fc3e1f0ad2 root <root@sparkcurv.(none)> 1788426001 +0200	pull: Fast-forward
+52926025e245dd206af09b2a20cbe5fc3e1f0ad2 15a88953fa94468fbaab1bba69fcc35258928627 root <root@sparkcurv.(none)> 1788543278 +0200	pull: Fast-forward
+15a88953fa94468fbaab1bba69fcc35258928627 07f7a011a2205ecd3f4863a13e625600ee921a2f root <root@sparkcurv.(none)> 1788719105 +0530	pull: Fast-forward
+07f7a011a2205ecd3f4863a13e625600ee921a2f a404732df8798e1a7eb561262683806707038dcf root <root@sparkcurv.(none)> 1788854550 +0530	pull: Fast-forward
+a404732df8798e1a7eb561262683806707038dcf c7f8eea99f8baef5d0a080323f87d80c99b46d83 root <root@sparkcurv.(none)> 1788928662 +0530	reset: moving to origin/main
+c7f8eea99f8baef5d0a080323f87d80c99b46d83 6858394bd1444192564c4d78bb0725d525e5f5e2 root <root@sparkcurv.(none)> 1789030092 +0530	pull: Fast-forward
+6858394bd1444192564c4d78bb0725d525e5f5e2 6af8076b0e59e34b832f94088cb9b0098fea6d67 root <root@sparkcurv.(none)> 1789036532 +0530	pull: Fast-forward
+6af8076b0e59e34b832f94088cb9b0098fea6d67 b7257a85aad35273ab7cc2cae809612e17583088 root <root@sparkcurv.(none)> 1789112122 +0530	pull: Fast-forward
+b7257a85aad35273ab7cc2cae809612e17583088 696bde73e8c6046d6359d6ce81b33a5993afc37a root <root@sparkcurv.(none)> 1789123541 +0530	pull: Fast-forward
+696bde73e8c6046d6359d6ce81b33a5993afc37a c69d52f3e9960bb6286587bd24103fca763e9b80 root <root@sparkcurv.(none)> 1789124953 +0530	pull: Fast-forward
+c69d52f3e9960bb6286587bd24103fca763e9b80 aaceb78d8ddd19d40bff61c3eec5217d54b033db root <root@sparkcurv.(none)> 1789148464 +0530	pull: Fast-forward
+aaceb78d8ddd19d40bff61c3eec5217d54b033db 092a75374af01ab1a3a11bc6ae495716c17d8197 root <root@sparkcurv.(none)> 1789150986 +0530	pull: Fast-forward
+092a75374af01ab1a3a11bc6ae495716c17d8197 6939288a59751fa27e9ef8c5e9d35f4c98e7203b root <root@sparkcurv.(none)> 1789152784 +0530	pull: Fast-forward
+6939288a59751fa27e9ef8c5e9d35f4c98e7203b 92752470d37e773ecadb1a1dd8f34568abb3bc31 root <root@sparkcurv.(none)> 1789197317 +0530	pull: Fast-forward
+92752470d37e773ecadb1a1dd8f34568abb3bc31 149e2ab31f214ce9e818806e97a3d0b774d22fd3 kesari4416 <kesari4416@gmail.com> 1789206560 +0530	pull: Fast-forward
+149e2ab31f214ce9e818806e97a3d0b774d22fd3 7df89b8716d95713d21ded9974c713e6264a1d05 kesari4416 <kesari4416@gmail.com> 1789209734 +0530	pull: Fast-forward
+7df89b8716d95713d21ded9974c713e6264a1d05 f2dd812a1432d4112aecc79f2126f69e40405da7 kesari4416 <kesari4416@gmail.com> 1789210708 +0530	pull: Fast-forward
+f2dd812a1432d4112aecc79f2126f69e40405da7 8e50a829adb7f67f33045b4a8b5b400ff3c0e303 kesari4416 <kesari4416@gmail.com> 1789212776 +0530	pull: Fast-forward
+8e50a829adb7f67f33045b4a8b5b400ff3c0e303 ccabf2a88e3b5be6dc6170771c11b30d035d59a6 kesari4416 <kesari4416@gmail.com> 1789223796 +0530	pull: Fast-forward
+ccabf2a88e3b5be6dc6170771c11b30d035d59a6 0366cd3102d07c4cb3aa1b2cb912a4f9c898dd41 kesari4416 <kesari4416@gmail.com> 1789235639 +0530	pull: Fast-forward
+0366cd3102d07c4cb3aa1b2cb912a4f9c898dd41 a17c55ec6aaf903b1478e4e23b89d811a28cb160 kesari4416 <kesari4416@gmail.com> 1789240122 +0530	pull: Fast-forward
+a17c55ec6aaf903b1478e4e23b89d811a28cb160 06887ddb722ce3fbdea9c8773c171122d6b5ad57 kesari4416 <kesari4416@gmail.com> 1789288835 +0530	pull: Fast-forward

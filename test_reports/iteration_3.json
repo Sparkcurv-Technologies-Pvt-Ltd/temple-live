@@ -1,0 +1,39 @@
+{
+  "summary": "Verified the Collection 'Choose Member' bug fix (subscription tariff paid members must not appear in dropdown). All 6 backend pytest cases pass AND the full end-to-end UI flow works: paying member THANUSH (id=7) for sub_tariff 14 removes him from the reopened Choose Member dropdown (102 -> 101 members, first member changes from THANUSH to B. Jagathis @ Vijay). DB rows manipulated during E2E were restored to pre-test state.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Collection form", "issues": ["Form radios (Present/Absent, Cash) have no data-testid attributes; label click works but automated tests must rely on antd class names + label text. Recommend adding data-testid to Choose Category select, Choose Member select, Present/Absent radios, Payment Mode select, Transaction Type radios, and Submit button."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_collection_choose_member.py",
+    "/app/test_reports/pytest/collection_choose_member.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "collection/views.py get_select_member_collection has O(N * M) query cost - iterates over every Member_Details row and issues one PeoplesAmountDetails.filter per member (plus inner .get() per row). For 500+ members this triggers ~1000+ SQL queries. Consider a single JOIN: PeoplesAmountDetails.objects.filter(sub_tariff_id=type, paid=False, management_profile=management, total_bal_amt__gt=0).values_list('member_id', flat=True).distinct() and then a single Member_Details.objects.filter(id__in=...) fetch.",
+    "The fallback block for empty type on Subscription Tariff correctly resolves the LATEST active tariff (order_by('-id')), but the frontend fix instead uses tariffs[0].id (which is the FIRST/oldest active tariff, id=14 in this DB, not the newest id=15). These two fixes therefore have different semantics: FE picks oldest active, BE fallback picks newest active. Both currently return the right members because member 7 was unpaid for BOTH 14 and 15, but the divergence could cause confusion later. Recommend aligning both to the same rule (either newest or oldest) and documenting it.",
+    "PeoplesAmountDetails.objects.get(id=new_mem.id) inside the loop after already retrieving new_mem is redundant DB round-trip (line ~2353, 2361, etc.). Just use new_mem.",
+    "Cash-only Transaction Type radio - only one radio labelled 'Cash' shown, so it always must be selected; consider making it the default when Payment Mode=Offline is chosen to save the user a click.",
+    "Print confirmation dialog appears immediately after successful submit (no explicit success toast). The 'Please fill in all the required details!' toast previously overlapped with the submit success path - during first submit attempt the Transaction Type Cash radio was not checked but form still highlighted only that field; verify all antd form-item required rules are set."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_collection_choose_member.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6)",
+    "frontend": "100% E2E - Choose Member dropdown correctly excludes paid member after submission"
+  },
+  "test_credentials": "admin@gmail.com / Admin@123 (JWT sent raw, no Bearer prefix)",
+  "seed_data_creation": "None. Temporarily created a Collection row (id=3347) for member 7 sub_tariff 14 during E2E, then deleted it and restored PeoplesAmountDetails id=2117 to paid=0, total_bal_amt=100.00. Verified counts back to 102 unpaid / 3 paid for sub_tariff 14.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoint POST /api/collection/get_select_member_collection/ is fully verified. Regression counts: Festival id=1 -> 48, Death Tariff id=42 -> 105, Subscription Tariff id=14 -> 102 (unpaid, excludes members 4/6/8 who paid=1). Latest active sub_tariff is id=15 with 106 unpaid; when 'type' is empty and category='Subscription Tariff', backend fallback returns 106. Frontend sends type=14 (uses tariffs[0].id from get_select_type response ordered ascending). Auth: raw JWT header. Preview URL: https://fd32960a-5552-41c8-bee2-e9a5572be60a.preview.emergentagent.com. Antd form ids: #AddCollection_collection_category, #AddCollection_member, #AddCollection_payment_mode. Radios (Present/Absent, Cash) use label-click.",
+  "rca of the issue": "Original bug: when 'Subscription Tariff' was selected, the Collection page sent `type=''` (subsCategory state was still empty because handleCollectionType did not await HandleSelectType before triggering HandleSelectMemberCollection). Backend's per-member loop then defaulted to *any* unpaid PeoplesAmountDetails row with sub_tariff__action=True, so any member who was still unpaid for ANY older active tariff appeared - including members already paid for the newest tariff. Fixes verified: (1) FE now awaits handleSelectType then uses tariffs[0].id, giving type=14 (first active tariff). (2) BE safety net: if type empty and category='Subscription Tariff', resolve to latest active tariff (order_by -id) - triggered only when FE misbehaves; independently verified returns 106 for latest tariff id=15. E2E confirmation: paying member 7 for sub_tariff 14 sets PeoplesAmountDetails.paid=1, total_bal_amt=0, and member 7 no longer appears in the reopened Choose Member dropdown."
+}

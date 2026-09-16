@@ -1,0 +1,12 @@
+npm i antd                  --> Ant Design ( "antd": "^5.11.0" )
+npm i axios                 --> Axios ( "axios": "^1.6.1" )
+npm i dayjs                 --> DayJs ( "dayjs": "^1.11.10" )
+npm i jwt-decode            --> JWT Decoder ( "jwt-decode": "^4.0.0" )
+npm i react-icons           --> React Icons
+npm i react-redux 
+npm i react-router-dom
+npm i redux-persist 
+npm i redux-thunk 
+npm i styled-components
+npm install @reduxjs/toolkit
+npm i vite-jsconfig-paths

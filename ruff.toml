@@ -1,0 +1,14 @@
+# Root-level ruff config - covers backend linting from project root
+exclude = [
+    "backend/.venv",
+    "**/.venv/**",
+    "backend/*/migrations",
+    "**/migrations/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/*.bak",
+    "frontend/",
+]
+
+[lint]
+ignore = ["F403", "F405", "F811", "F821"]
