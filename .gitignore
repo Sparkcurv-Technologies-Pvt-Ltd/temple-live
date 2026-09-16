@@ -192,3 +192,21 @@ frontend/node_modules/.cache/default-development/5.pack
 frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/11.pack
 frontend/node_modules/.cache/default-development/4.pack
+
+# Logs
+*.log
+backend/logs/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment/secrets
+.env
+.env.*
+
+# Node
+node_modules/
