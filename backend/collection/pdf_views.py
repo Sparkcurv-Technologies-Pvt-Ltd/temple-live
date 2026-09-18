@@ -150,8 +150,6 @@ def _receipt_flowables(styles, r):
         data.append(["Date", r["date"]])
     if r["purpose"]:
         data.append(["Purpose", r["purpose"]])
-    if r["mode"]:
-        data.append(["Payment Mode", r["mode"]])
     if r["amt"]:
         data.append(["Amount Paid", _rupee(r["amt"])])
     t = Table(data, colWidths=[55 * mm, None])
@@ -635,42 +633,12 @@ def public_interest_statement_pdf(request, token: str):
     story.append(b_tbl)
     story.append(Spacer(1, 6 * mm))
 
-    # Outstanding card
-    # FIX: "Principal issued" previously showed only bal.principal_amt.
-    # Relabeled and changed to Principal + Interest (principal_amt +
-    # intrest_amt) per owner request — this reflects the borrower's full
-    # original obligation (principal borrowed + total interest billed on
-    # the loan), not just the principal component.
-    if bal:
-        total_issued = float(bal.principal_amt or 0) + float(bal.intrest_amt or 0)
-        outs = [
-            ["Outstanding balance", ""],
-            ["Total Issued (Principal + Interest)", _rupee(total_issued)],
-            ["Principal paid", _rupee(bal.principal_paid)],
-            ["Principal balance", _rupee(bal.principal_balance)],
-            ["Penalty balance", _rupee(bal.penalty_balance_amt)],
-            ["Total outstanding", _rupee(float(bal.balance_amt or 0) + float(bal.penalty_balance_amt or 0))],
-        ]
-        o_tbl = Table(outs, colWidths=[80 * mm, None])
-        o_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), TEMPLE_GREEN),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("SPAN", (0, 0), (-1, 0)),
-            ("FONTSIZE", (0, 0), (-1, 0), 12),
-            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#fef3c7")),
-            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 1), (-1, -1), 10),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#f8fafc")]),
-            ("BOX", (0, 0), (-1, -1), 0.5, BORDER_GREY),
-            ("INNERGRID", (0, 1), (-1, -1), 0.25, BORDER_GREY),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        story.append(o_tbl)
-        story.append(Spacer(1, 6 * mm))
+    # FIX: removed the "Outstanding balance" card (Total Issued,
+    # Principal paid, Principal balance, Penalty balance, Total
+    # outstanding) per request. `bal` is still fetched above since
+    # `closing_balance` falls back to `bal.balance_amt` when there are
+    # no ledger rows in the 1-year window — only the rendered card is
+    # gone.
 
     # 1-year balance sheet — now the exact structure/data from
     # InterestPeopleReport (see FIX comment above).
