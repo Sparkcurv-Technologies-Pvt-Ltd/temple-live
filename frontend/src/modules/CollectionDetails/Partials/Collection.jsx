@@ -1530,10 +1530,17 @@ export const Collection = ({ trigger }) => {
     }
 
     if (intChecked) {
-      if (record?.penalty_amount > 0 || record?.interst_amount > 0) {
+      // FIX: a pure waiver (borrower's whole penalty/interest is
+      // forgiven via Discount, so cash collected is legitimately 0)
+      // was being rejected here every time, since this check only
+      // ever looked at cash paid (penalty_amount / interst_amount)
+      // and never at discount_amount. That silently blocked submit
+      // for a fully-discounted penalty/interest with no error the
+      // operator could act on beyond the generic warning below.
+      if (record?.penalty_amount > 0 || record?.interst_amount > 0 || record?.discount_amount > 0) {
       }
       else {
-        toast.warn("Please enter a Interest or Penalty Amount greater than 0!")
+        toast.warn("Please enter a Interest, Penalty, or Discount Amount greater than 0!")
         return
       }
     }
