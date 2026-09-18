@@ -138,20 +138,23 @@ const buildMessage = ({
   statement,
   isInterest,
 }) => {
-  // Composite "Share Statement" WhatsApp message = receipt + 1-year
-  // statement summary + pending amount + link to the customer's Balance
-  // Sheet page. Sent from Collection History → Print → Share Statement.
+  // Composite "Share Statement" WhatsApp message = receipt + pending amount
+  // + link to the customer's Balance Sheet page. Sent from Collection
+  // History → Print → Share Statement.
+  //
+  // FIX: removed the "Receipt #: <collectionNo>" line and the entire
+  // "*1-Year Statement* / Total Received: ..." block per request — the
+  // recipient no longer sees these; the receipt-thanks line, breakdown,
+  // pending amount, and the link are unaffected.
 
   // ---- Receipt block --------------------------------------------------
   const purposeLine = purpose ? ` for ${purpose}` : "";
   const modeLine = paymentMode ? ` (${paymentMode})` : "";
-  const refLine = collectionNo ? `\nReceipt #: ${collectionNo}` : "";
   const receiptLines = [
     `*Payment Receipt*`,
     ``,
     `Dear ${name},`,
-    `Thanks for your payment of \u20B9${paidAmt}${purposeLine} on ${payDate}${modeLine}.` +
-      refLine,
+    `Thanks for your payment of \u20B9${paidAmt}${purposeLine} on ${payDate}${modeLine}.`,
   ];
   const showBreakdown =
     (Number(interestAmt) || 0) > 0 || (Number(penaltyAmt) || 0) > 0;
@@ -165,14 +168,6 @@ const buildMessage = ({
       ].filter(Boolean)
     : [];
 
-  // ---- 1-year statement summary --------------------------------------
-  const t = statement?.totals || {};
-  const statementLines = [
-    ``,
-    `*1-Year Statement*`,
-    `Total Received: \u20B9${fmtAmt(t.amount)} (${t.count || 0} payments)`,
-  ];
-
   // ---- Pending amount -------------------------------------------------
   const pendingLines = [];
   if (isInterest && statement?.outstanding) {
@@ -180,11 +175,7 @@ const buildMessage = ({
     const totalOutstanding =
       Number(outs.balance_amt || 0) + Number(outs.penalty_balance_amt || 0);
     if (totalOutstanding > 0) {
-      pendingLines.push(
-        `Pending: \u20B9${fmtAmt(totalOutstanding)} ` +
-          `(Principal \u20B9${fmtAmt(outs.principal_balance)} + ` +
-          `Penalty \u20B9${fmtAmt(outs.penalty_balance_amt)})`
-      );
+      pendingLines.push(`Pending: \u20B9${fmtAmt(totalOutstanding)}`);
     }
   } else if (!isInterest && statement?.pending_dues?.Total !== undefined) {
     const pendingTotal = Number(statement.pending_dues.Total || 0);
@@ -196,7 +187,6 @@ const buildMessage = ({
   return [
     ...receiptLines,
     ...breakdownLines,
-    ...statementLines,
     ...pendingLines,
     ``,
     `View full balance sheet: ${link}`,
@@ -213,6 +203,8 @@ const buildMessage = ({
  *
  * QA Bug 5/6 — Fine amount is now surfaced in the receipt whenever a
  * penalty (or interest) is charged so the payer can see the split.
+ *
+ * FIX: removed the "Receipt #: <collectionNo>" line per request.
  */
 const buildReceiptMessage = ({
   name,
@@ -228,7 +220,6 @@ const buildReceiptMessage = ({
 }) => {
   const purposeLine = purpose ? ` for ${purpose}` : "";
   const modeLine = paymentMode ? ` (${paymentMode})` : "";
-  const refLine = collectionNo ? `\nReceipt #: ${collectionNo}` : "";
   const showBreakdown =
     (Number(interestAmt) || 0) > 0 || (Number(penaltyAmt) || 0) > 0;
   const breakdownLines = showBreakdown
@@ -244,8 +235,7 @@ const buildReceiptMessage = ({
     `*Payment Receipt*`,
     ``,
     `Dear ${name},`,
-    `Thanks for your payment of \u20B9${paidAmt}${purposeLine} on ${payDate}${modeLine}.` +
-      refLine,
+    `Thanks for your payment of \u20B9${paidAmt}${purposeLine} on ${payDate}${modeLine}.`,
     ...breakdownLines,
     ``,
     `— ${templeName || "our Temple"}`,
