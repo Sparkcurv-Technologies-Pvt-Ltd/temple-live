@@ -4595,8 +4595,6 @@ def chitname_withfiltering_category(request):
 
                         nnnn = mem_obj.interest.paid_counts
 
-                        current_date = checking_date
-
                         # Owner rule (Feb 2026): use the operator's
                         # selected `checking_date` for the current
                         # month/year window so the "Choose Person"
@@ -4630,8 +4628,14 @@ def chitname_withfiltering_category(request):
                                     months=mem_obj.interest.interest_period
                                 )
 
-                                # Calculate the number of months since the interest started
-                                calcu_months = abs(mem_obj.interest.interest_date - date.today())
+                                # Calculate the number of months since the interest started.
+                                # FIX (Sept 2026): use the operator's selected checking_date
+                                # instead of date.today() so this stays consistent with the
+                                # "picked pay_date" rule applied everywhere else in this
+                                # function — backdated collections should compute the period
+                                # window relative to the date the operator chose, not the
+                                # real calendar date.
+                                calcu_months = abs(mem_obj.interest.interest_date - checking_date)
                                 months_num = calcu_months.days // 30  # Approximate month count
 
                                 checking_days_months = (
@@ -4659,7 +4663,7 @@ def chitname_withfiltering_category(request):
                                         and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
                                     ):
                                         # Check if terminating_date has passed but payments are still pending
-                                        if terminating_date < date.today():
+                                        if terminating_date < checking_date:
                                             print("Interest period is over but payments are still pending.")
                                         fund_mem_list.append(mem_obj.interest)
                                 else:
@@ -4677,7 +4681,7 @@ def chitname_withfiltering_category(request):
                                             and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
                                         ):
                                             # Check if terminating_date has passed but payments are still pending
-                                            if terminating_date < date.today():
+                                            if terminating_date < checking_date:
                                                 print("Interest period is over but payments are still pending.")
                                             fund_mem_list.append(mem_obj.interest)
 
@@ -4695,7 +4699,13 @@ def chitname_withfiltering_category(request):
                             # show the borrower whenever today's cumulative day-count
                             # exceeds their paid_counts (helper caps at interest_period
                             # so overdue borrowers with remaining installments still appear).
-                            expected = _installment_expected_count(mem_obj.interest, date.today())
+                            #
+                            # FIX (Sept 2026): pass checking_date, not date.today() —
+                            # this branch previously computed "due" relative to the
+                            # real calendar date even though the operator may have
+                            # picked an earlier pay_date, inconsistent with every
+                            # other branch in this function.
+                            expected = _installment_expected_count(mem_obj.interest, checking_date)
                             if int(mem_obj.interest.paid_counts or 0) < expected:
                                 fund_mem_list.append(mem_obj.interest)
 
@@ -4712,7 +4722,9 @@ def chitname_withfiltering_category(request):
                                 terminating_date = mem_obj.interest.interest_date + relativedelta(
                                     weeks=mem_obj.interest.interest_period
                                 )
-                                calcu_weeks = abs(mem_obj.interest.interest_date - date.today())
+                                # FIX (Sept 2026): checking_date instead of date.today(),
+                                # same reasoning as the Month branch above.
+                                calcu_weeks = abs(mem_obj.interest.interest_date - checking_date)
                                 weeks_num = calcu_weeks.days // 7
                                 checking_days_weeks = (
                                         mem_obj.interest.interest_date + relativedelta(weeks=weeks_num)
@@ -4738,7 +4750,7 @@ def chitname_withfiltering_category(request):
                                             and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
                                     ):
                                         # Check if terminating_date has passed but payments are still pending
-                                        if terminating_date < date.today():
+                                        if terminating_date < checking_date:
                                             print("Interest period is over but payments are still pending.")
                                         fund_mem_list.append(mem_obj.interest)
                                 else:
@@ -4756,7 +4768,7 @@ def chitname_withfiltering_category(request):
                                                 and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
                                         ):
                                             # Check if terminating_date has passed but payments are still pending
-                                            if terminating_date < date.today():
+                                            if terminating_date < checking_date:
                                                 print("Interest period is over but payments are still pending.")
                                             fund_mem_list.append(mem_obj.interest)
 
@@ -4786,188 +4798,46 @@ def chitname_withfiltering_category(request):
 
             elif interest_principle == True and interest_field == True:
 
-                if interest_type == "Chit Interest":
-                    fund_member = PeopleInterestDetails.objects.filter(chitt_fund_id=type1, action=True,
-                                                                       management_profile=management,
-                                                                       chit_name=chit_name,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-                else:
-
-                    fund_member = PeopleInterestDetails.objects.filter(action=True, management_profile=management,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-
-                fund_mem_list = []
-                for fund in fund_member:
-                    mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
-                    if mem_obj1:
-                        mem_obj = PeopleInterestBalanceSheet.objects.get(interest_id=fund.id)
-
-                        nnnn = mem_obj.interest.paid_counts
-
-                        current_date = checking_date
-
-                        # Owner rule (Feb 2026): use the operator's
-                        # selected `checking_date` for the current
-                        # month/year window so the "Choose Person"
-                        # dropdown reflects the picked pay_date, not
-                        # today.
-                        month = checking_date.month
-                        year = checking_date.year
-                        number_of_days = calendar.monthrange(year, month)[1]
-                        first_date = date(year, month, 1)
-                        last_date = date(year, month, number_of_days)
-                        delta = last_date - first_date
-                        final_dates = []
-                        for i in range(delta.days + 1):
-                            final_dates.append((first_date + timedelta(days=i)))
-
-                        last_day_of_month = calendar.monthrange(year, month)[1]
-                        last_date = datetime(year, month, last_day_of_month)
-                        start_date = datetime(year, month, 1)
-
-
-                        if mem_obj.interest.interest_period_type == "Month":
-                            try:
-
-                                if mem_obj.penalty_balance_amt > 0 or ((mem_obj.interest.interest_date + relativedelta(
-                                        months=mem_obj.interest.paid_counts)) < start_date.date()):
-                                    checking_collection_date = CollectionDetails.objects.filter(
-                                        interest_id=mem_obj.interest_id)
-                                    if checking_collection_date:
-                                        checking_collection_dates = CollectionDetails.objects.filter(
-                                            interest_id=mem_obj.interest_id).last()
-                                        if mem_obj.penalty_balance_amt > 0 or (
-                                                checking_collection_dates.pay_date.month != month and checking_collection_dates.pay_date.year == year):
-                                            fund_mem_list.append(mem_obj.interest)
-                                    else:
-
-                                        fund_mem_list.append(mem_obj.interest)
-
-
-                            except Exception:
-                                print("hhhhhhhhhh")
-
-                        if mem_obj.interest.interest_period_type == "Month":
-                            try:
-                                # Check if there is an overdue penalty or missed payment
-                                if mem_obj.penalty_balance_amt > 0 or (
-                                    (mem_obj.interest.interest_date + relativedelta(
-                                        months=mem_obj.interest.paid_counts
-                                    )) < start_date.date()
-                                ):
-                                    checking_collection_date = CollectionDetails.objects.filter(
-                                        interest_id=mem_obj.interest_id
-                                    )
-                                    if checking_collection_date.exists():
-                                        # Get the latest collection details
-                                        last_collection = checking_collection_date.last()
-                                        # Check if payment was made in the current month and year
-                                        if mem_obj.penalty_balance_amt > 0 or (
-                                            last_collection.pay_date.month != month
-                                            or last_collection.pay_date.year != year
-                                        ):
-                                            # Add to the fund list if payment is overdue
-                                            fund_mem_list.append(mem_obj.interest)
-                                    else:
-                                        # If no payment history exists, consider it overdue
-                                        fund_mem_list.append(mem_obj.interest)
-                            except Exception as e:
-                                print(f"Error while processing member {mem_obj.interest_id}: {e}")
-                                
-                        elif mem_obj.interest.interest_period_type == "Days":
-                            # CHIT_FUND_002 fix (Feb 2026): unified visibility rule
-                            # using _installment_expected_count (same helper used in
-                            # chitfund_interest_member_details).  Show borrower whenever
-                            # paid_counts < expected count for checking_date, or penalty
-                            # is outstanding.
-                            _days_expected = _installment_expected_count(mem_obj.interest, checking_date)
-                            if mem_obj.penalty_balance_amt > 0 or int(mem_obj.interest.paid_counts or 0) < _days_expected:
-                                fund_mem_list.append(mem_obj.interest)
-
-
-                        elif mem_obj.interest.interest_period_type == "Week":
-                            # with collection added
-
-                            checking_collection_weeks = CollectionDetails.objects.filter(
-                                interest_id=mem_obj.interest_id)
-
-                            if checking_collection_weeks:
-                                checking_collection_week = CollectionDetails.objects.filter(
-                                    interest_id=mem_obj.interest_id).last()
-                                terminating_date = mem_obj.interest.interest_date + relativedelta(
-                                    weeks=mem_obj.interest.interest_period)
-                                calcu_weeks = abs(mem_obj.interest.interest_date - date.today())
-
-                                weeks_num = calcu_weeks.days // 7
-                                predicting_weeks = (mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                checking_days_weeks_limit = (
-                                            mem_obj.interest.interest_date + relativedelta(weeks=weeks_num + 1))
-                                dates = []
-                                current_date = (mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                while current_date >= predicting_weeks and current_date < checking_days_weeks_limit:
-                                    dates.append(current_date)
-                                    current_date += timedelta(days=1)
-                                if mem_obj.penalty_balance_amt > 0 or (checking_collection_week.pay_date not in dates and mem_obj.interest.paid_counts != mem_obj.interest.interest_period and terminating_date and terminating_date >= checking_date):
-                                        # checking_collection_week.pay_date not in dates and mem_obj.interest.paid_counts != mem_obj.interest.interest_period and terminating_date >= checking_date):
-
-                                    fund_mem_list.append(mem_obj.interest)
-
-
-
-                            else:
-                                calcu_weeks = abs(mem_obj.interest.interest_date - date.today())
-                                weeks_num = calcu_weeks.days // 7
-                                if weeks_num != 0:
-                                    if weeks_num == 1:
-                                        checking_days_weeks = (
-                                                    mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                        checking_days_weeks_limit = (
-                                                    mem_obj.interest.interest_date + relativedelta(weeks=weeks_num + 1))
-                                        dates = []
-                                        current_date = (mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                        while current_date >= checking_days_weeks and current_date < checking_days_weeks_limit:
-                                            dates.append(current_date)
-                                            current_date += timedelta(days=1)
-                                        print(mem_obj.interest_apply_date + relativedelta(
-                                            weeks=mem_obj.interest.paid_counts))
-                                        terminating_date = mem_obj.interest.interest_date + relativedelta(
-                                            weeks=mem_obj.interest.interest_period)
-
-                                        if checking_days_weeks <= checking_date:
-
-                                            if mem_obj.penalty_balance_amt > 0 or (((
-                                                                                            mem_obj.interest_apply_date + relativedelta(
-                                                                                            weeks=mem_obj.interest.paid_counts)) not in dates) and mem_obj.interest.paid_counts != mem_obj.interest.interest_period and terminating_date >= checking_date):
-                                                # if checking_date == i and ((mem_obj.interest_apply_date + relativedelta(weeks=mem_obj.interest.paid_counts)) != i):
-                                                fund_mem_list.append(mem_obj.interest)
-                                    else:
-                                        checking_days_weeks = (
-                                                    mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                        checking_days_weeks_limit = (
-                                                    mem_obj.interest.interest_date + relativedelta(weeks=weeks_num + 1))
-                                        dates = []
-                                        current_date = (mem_obj.interest.interest_date + relativedelta(weeks=weeks_num))
-                                        while current_date >= checking_days_weeks and current_date < checking_days_weeks_limit:
-                                            dates.append(current_date)
-                                            current_date += timedelta(days=1)
-
-                                        print(mem_obj.interest_apply_date + relativedelta(
-                                            weeks=mem_obj.interest.paid_counts))
-                                        terminating_date = mem_obj.interest.interest_date + relativedelta(
-                                            weeks=mem_obj.interest.interest_period)
-
-                                        if checking_days_weeks <= checking_date:
-
-                                            if mem_obj.penalty_balance_amt > 0 or (((
-                                                                                            mem_obj.interest_apply_date + relativedelta(
-                                                                                            weeks=mem_obj.interest.paid_counts)) in dates) and mem_obj.interest.paid_counts != mem_obj.interest.interest_period and terminating_date >= checking_date):
-                                                # if checking_date == i and ((mem_obj.interest_apply_date + relativedelta(weeks=mem_obj.interest.paid_counts)) != i):
-                                                fund_mem_list.append(mem_obj.interest)
-                                else:
-                                    print("999999999999999")
-
+                # FIX (Sept 2026 — combined Principal+Penalty listing bug):
+                #
+                # This branch previously ran a first loop over fund_member
+                # to build fund_mem_list, containing a Month sub-block that
+                # was accidentally duplicated (two separate
+                # `if interest_period_type == "Month":` blocks, each able to
+                # append the same borrower, with two DIFFERENT and mutually
+                # inconsistent conditions) and a Week sub-block whose
+                # inclusion condition was inverted once a loan passed its
+                # first week (`in dates` instead of `not in dates`).
+                #
+                # However, immediately after that entire loop, the code
+                # re-queried fund_member and did `fund_mem_list = []` again,
+                # discarding everything the first loop computed and
+                # rebuilding the list from scratch in a second loop. So the
+                # duplicate-Month and inverted-Week bugs never actually
+                # reached the response — they were dead code.
+                #
+                # The SECOND loop is what determined the actual response,
+                # and it had a different, more serious bug: for Month it
+                # only included a borrower when
+                # `interest_apply_date + 1 month` fell in the exact same
+                # calendar month/year as the operator's selected date — a
+                # single fixed window that never advances with
+                # `paid_counts`. Once that one month passed, a borrower
+                # behind on payments would never reappear in "Choose
+                # Person" again, no matter how many periods they owed. The
+                # Week case had the same kind of single fixed-week problem.
+                #
+                # Fixed by removing the dead first loop and replacing both
+                # the Month and Week logic in the (now single) loop with
+                # the same due-by-current-period calculation already used
+                # correctly for "Days" (`_installment_expected_count`,
+                # which is period-type aware and accounts for elapsed
+                # installments against `paid_counts`, capped at
+                # `interest_period`). A borrower is now listed exactly when
+                # they owe penalty/interest/principal right now, or they
+                # haven't paid as many installments as their period cadence
+                # says they should have by `checking_date` — for Month,
+                # Week, and Days alike.
                 if interest_type == "Chit Interest":
                     fund_member = PeopleInterestDetails.objects.filter(chitt_fund_id=type1, action=True,
                                                                        management_profile=management,
@@ -4984,35 +4854,18 @@ def chitname_withfiltering_category(request):
                     mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
                     if mem_obj1:
                         mem_obj = PeopleInterestBalanceSheet.objects.get(interest_id=fund.id)
-                        if mem_obj.interest.interest_period_type == "Month":
-                            if mem_obj.penalty_balance_amt > 0 or ((mem_obj.interest_apply_date + relativedelta(
-                                    months=1)).year == checking_date_year and (
-                                                                           mem_obj.interest_apply_date + relativedelta(
-                                                                           months=1)).month == checking_date_month):
-                                fund_mem_list.append(mem_obj.interest)
-                        elif mem_obj.interest.interest_period_type == "Days":
-                            # CHIT_FUND_002 fix (Feb 2026): unified visibility rule
-                            # using _installment_expected_count.
-                            _days_expected = _installment_expected_count(mem_obj.interest, checking_date)
-                            if mem_obj.penalty_balance_amt > 0 or int(mem_obj.interest.paid_counts or 0) < _days_expected:
-                                fund_mem_list.append(mem_obj.interest)
-                        elif mem_obj.interest.interest_period_type == "Week":
-                            checking_days_weeks = (mem_obj.interest_apply_date + relativedelta(weeks=1))
-                            checking_days_weeks_limit = (mem_obj.interest_apply_date + relativedelta(weeks=2))
-                            dates = []
-                            current_date = (mem_obj.interest_apply_date + relativedelta(weeks=1))
-                            while current_date >= checking_days_weeks and current_date < checking_days_weeks_limit:
-                                dates.append(current_date)
-                                current_date += timedelta(days=1)
 
-                            print(mem_obj.interest_apply_date + relativedelta(weeks=mem_obj.interest.paid_counts))
-                            if (mem_obj.interest_apply_date + relativedelta(weeks=1)).year == checking_date_year and (
-                                    mem_obj.interest_apply_date + relativedelta(weeks=1)).month == checking_date_month:
+                        has_balance = (
+                            float(mem_obj.penalty_balance_amt or 0) > 0
+                            or float(mem_obj.intrest_balance_amt or 0) > 0
+                            or float(mem_obj.principal_balance or 0) > 0
+                        )
+                        if not has_balance:
+                            continue
 
-                                if mem_obj.penalty_balance_amt > 0 or ((mem_obj.interest_apply_date + relativedelta(
-                                        weeks=mem_obj.interest.paid_counts)) not in dates) and mem_obj.interest.interest_date != checking_date and mem_obj.interest.paid_counts != mem_obj.interest.interest_period:
-                                    # if checking_date == i and ((mem_obj.interest_apply_date + relativedelta(weeks=mem_obj.interest.paid_counts)) != i):
-                                    fund_mem_list.append(mem_obj.interest)
+                        expected = _installment_expected_count(mem_obj.interest, checking_date)
+                        if float(mem_obj.penalty_balance_amt or 0) > 0 or int(mem_obj.interest.paid_counts or 0) < expected:
+                            fund_mem_list.append(mem_obj.interest)
 
             # -------------------------------------------------------------
             # Owner rule (Feb 2026): Date-scoped post-filter.
