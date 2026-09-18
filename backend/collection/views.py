@@ -1436,6 +1436,7 @@ def edit_collections_details(request, pk):
                                 customer.amount)
                             festival_new_get.save()
 
+
                     elif customer.collection_category == "Subscription Tariff":
                         festival_new = PeoplesAmountDetails.objects.filter(sub_tariff=customer.sub_tariff,
                                                                            member=customer.member)
@@ -2436,15 +2437,42 @@ def edit_collections_details(request, pk):
                                     chit_fund_get.collected_principal_amount) - float(customer.amount)
                                 chit_fund_get.cash_inhand_amount = float(chit_fund_get.cash_inhand_amount) - float(
                                     customer.amount) - float(customer.interst_amount) - float(customer.penalty_amount)
-                                chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) - float(
-                                    customer.interst_amount) - float(customer.penalty_amount)
+                                # FIX (discount revert): POST only subtracts
+                                # `discount` from profit_amount on the
+                                # principal-or-combined path (interest_field
+                                # and interest_principle both True, or
+                                # interest_principle True alone) — the
+                                # penalty-only path (interest_field True,
+                                # interest_principle False) never touches
+                                # discount and adds ONLY penalty_amount to
+                                # profit, not interst_amount at all. Reversing
+                                # both cases the same way (old code) permanently
+                                # under-restored profit_amount by the discount
+                                # on every principal/combined discounted delete,
+                                # and over-subtracted interst_amount on every
+                                # penalty-only delete.
+                                if customer.interest_field and not customer.interest_principle:
+                                    chit_fund_get.profit_amount = float(
+                                        chit_fund_get.profit_amount) - float(customer.penalty_amount)
+                                else:
+                                    chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) - float(
+                                        customer.interst_amount) - float(customer.penalty_amount) + _discount
                                 chit_fund_get.save()
 
                         # festival_get.credit_amt = float(festival_get.credit_amt)-float(customer.amount)
+                        # FIX (discount revert): the branches above already
+                        # restore principal_balance/penalty_balance_amt using
+                        # the discount-inclusive _settled/_pen_settled/
+                        # _prin_settled amounts. This aggregate reversal must
+                        # match — in every branch, exactly `_discount` extra
+                        # was settled beyond the raw amount/penalty/interest
+                        # fields, so add it back here too, or balance_amt and
+                        # debit_amt drift out of sync with principal_balance/
+                        # penalty_balance_amt on every discounted delete.
                         festival_get.debit_amt = float(festival_get.debit_amt) - float(customer.amount) - float(
-                            customer.penalty_amount) - float(customer.interst_amount)
+                            customer.penalty_amount) - float(customer.interst_amount) - _discount
                         festival_get.balance_amt = float(festival_get.balance_amt) + float(customer.amount) + float(
-                            customer.penalty_amount) + float(customer.interst_amount)
+                            customer.penalty_amount) + float(customer.interst_amount) + _discount
 
                         festival_get.save()
 
