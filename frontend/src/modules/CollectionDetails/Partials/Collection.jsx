@@ -2211,6 +2211,31 @@ export const Collection = ({ trigger }) => {
                         suffix={"₹"}
                         onChange={handlePenaltyAmt}
                         max={penaltyMax}
+                        rules={[
+                          // Feb 2026 owner rule: Penalty Pay Amt must
+                          // exactly equal the current Penalty Amt
+                          // (which handleDiscountInstallAmt already
+                          // live-reduces when a discount is applied).
+                          // This actually blocks submit — unlike
+                          // handlePenaltyAmt above, which only shows a
+                          // toast and never stopped the form before.
+                          ({ getFieldValue }) => ({
+                            validator(_, value) {
+                              const penaltyAmt = Number(getFieldValue('penalty_amt') || 0);
+                              const payAmt = Number(value || 0);
+                              if (payAmt !== penaltyAmt) {
+                                return Promise.reject(
+                                  new Error(
+                                    payAmt > penaltyAmt
+                                      ? `Penalty Pay Amount (Rs. ${payAmt}) is greater than Penalty Amount (Rs. ${penaltyAmt})`
+                                      : `Penalty Pay Amount (Rs. ${payAmt}) must equal Penalty Amount (Rs. ${penaltyAmt})`
+                                  )
+                                );
+                              }
+                              return Promise.resolve();
+                            }
+                          })
+                        ]}
                       />
                     </Col>}
                 </>
