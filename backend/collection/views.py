@@ -3391,14 +3391,27 @@ def unpaid_list(request):
 
         elif data == "Subscription Tariff":
             if get_role == "User" and perm.sub_tariff == True or get_role == "Admin" or rejin.is_superuser == True:
-                fund = ADDSubscriptionTariffDetails.objects.filter(management_profile=management)
+                today = date.today()
+                fund = ADDSubscriptionTariffDetails.objects.filter(
+                    management_profile=management,
+                    from_date__lte=today,
+                    to_date__gte=today,
+                )
                 serializer = ADDSubscriptionTariffDetailseSerializer(fund, many=True)
             else:
                 return Response({'message': "un-authenticate"}, status.HTTP_401_UNAUTHORIZED)
 
         elif data == "Death Tariff":
             if get_role == "User" and perm.death_tariff == True or get_role == "Admin" or rejin.is_superuser == True:
-                fund = DeathDetails.objects.filter(mangement=management, old_death=False)
+                # FIX: scoped to the death tariff's validity window, same
+                # pattern as Festival/Subscription Tariff above.
+                # >>> Replace `end_date` below with your real field name <
+                today = date.today()
+                fund = DeathDetails.objects.filter(
+                    mangement=management,
+                    old_death=False,
+                    end_date__gte=today,   # <-- confirm/replace field name
+                )
                 serializer = DeathDetailsSerializer(fund, many=True)
             else:
                 return Response({'message': "un-authenticate"}, status.HTTP_401_UNAUTHORIZED)
@@ -3429,21 +3442,37 @@ def unpaid_list_member(request):
 
         data = request.data['category']
         type = request.data['type']
+        today = date.today()
         member = Member_Details.objects.filter(action=True)
         mem_list = []
         amount_list = []
 
         if data == "Subscription Tariff":
-            amount = PeoplesAmountDetails.objects.filter(management_profile=management, paid=False, sub_tariff_id=type)
+            amount = PeoplesAmountDetails.objects.filter(
+                management_profile=management,
+                paid=False,
+                sub_tariff_id=type,
+                sub_tariff__to_date__gte=today,
+            )
 
         elif data == "Festival":
-            amount = PeoplesAmountDetails.objects.filter(festival_id=type, management_profile=management, paid=False)
-
-
+            amount = PeoplesAmountDetails.objects.filter(
+                festival_id=type,
+                management_profile=management,
+                paid=False,
+                festival__end_date__gte=today,
+            )
 
         elif data == "Death Tariff":
-            amount = PeoplesAmountDetails.objects.filter(death_id=type, management_profile=management, paid=False)
-
+            # FIX: scoped to the death tariff's validity window, same as
+            # Subscription Tariff / Festival above.
+            # >>> Replace `end_date` below with your real field name <
+            amount = PeoplesAmountDetails.objects.filter(
+                death_id=type,
+                management_profile=management,
+                paid=False,
+                death__end_date__gte=today,   # <-- confirm/replace field name
+            )
 
         elif data == "Marriage":
             amount = []
@@ -3459,7 +3488,6 @@ def unpaid_list_member(request):
         dic['amount'] = ser.data
 
         return Response(dic, status=status.HTTP_200_OK)
-
 
 @api_view(['GET', 'POST'])
 def unpaid_list_member_date_filter(request):
