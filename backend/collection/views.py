@@ -858,6 +858,14 @@ def add_collection_details(request):
                                         interest_obj.fix_interest_rate_percent)
                                     new_principal_amt = float(temp_family.amount) - new_pro_amount  # converted to float
 
+                            # FIX 1: penalty-only collection on an Installment loan.
+                            # No installment interest or principal is being paid, so
+                            # neither may touch profit or principal.
+                            if (interest_obj.interest_category == "Installment Interest"
+                                    and temp_family.interest_field and not temp_family.interest_principle):
+                                new_pro_amount = 0.0
+                                new_principal_amt = 0.0
+
                             if interest_obj.interest_category == "Installment Interest":
                                 _discount = float(temp_family.discount_amount or 0)
                                 chit_fund_get.collected_principal_amount = float(
@@ -896,7 +904,7 @@ def add_collection_details(request):
                                 else:
                                     chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) + float(
                                         temp_family.interst_amount) + float(temp_family.penalty_amount) - _discount
-                                
+
                                 chit_fund_get.save()
 
                             if interest_obj.interest_category == "Installment Interest":
@@ -1051,104 +1059,82 @@ def add_collection_details(request):
                                                       banks=temp_family.bank_link)
 
 
-                            elif ssss.interest.interest_type == "Chit Interest":
+                            # FIX 2: was `interest_type == "Chit Interest"`, a value that is
+                            # never stored (the column holds "Chit fund Interest"), so this
+                            # branch never ran. Rewritten so it is also correct when it does.
+                            elif ssss.interest.interest_type == "Chit fund Interest":
+                                festival_get = PeopleInterestBalanceSheet.objects.get(
+                                    interest=temp_family.interest, management_profile=management)
+                                _amt = float(temp_family.amount)
+                                _interest_profit = 0.0      # profit part of this payment
+
                                 if ssss.interest.interest_category in ("Interest", "Interest with capital"):
-                                    festival_get = PeopleInterestBalanceSheet.objects.get(
-                                        interest=temp_family.interest, management_profile=management)
-                                    festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + float(
-                                        temp_family.amount)
-                                    festival_get.intrest_balance_amt = float(
-                                        festival_get.intrest_balance_amt) - float(temp_family.amount)
-                                    festival_get.balance_amt = float(festival_get.balance_amt) - float(
-                                        temp_family.amount)
-                                    festival_get.debit_amt = float(festival_get.debit_amt) + float(
-                                        temp_family.amount)
+                                    festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _amt
+                                    festival_get.intrest_balance_amt = float(festival_get.intrest_balance_amt) - _amt
+                                    festival_get.balance_amt = float(festival_get.balance_amt) - _amt
+                                    festival_get.debit_amt = float(festival_get.debit_amt) + _amt
                                     festival_get.save()
-                                    InterestPeopleReport.objects.create(
-                                        management_profile=festival_get.management_profile,
-                                        interest_id=festival_get.interest.id,
-                                        reportdate=temp_family.created_at.date(), debit_amt=festival_get.debit_amt,
-                                        balance_amt=festival_get.balance_amt, type_choice="Payment",
-                                        created_by=rejin.id, collection=temp_family)
-
-
+                                    _interest_profit = _amt
 
                                 elif ssss.interest.interest_category == "Installment Interest":
-                                    festival_get = PeopleInterestBalanceSheet.objects.get(
-                                        interest=temp_family.interest, management_profile=management)
-
-                                    festival_get.balance_amt = float(festival_get.balance_amt) - float(
-                                        temp_family.amount)
-                                    festival_get.debit_amt = float(festival_get.debit_amt) + float(
-                                        temp_family.amount)
-                                    count_cal = (temp_family.amount / ssss.interest.installment_amt)
-                                    ssss.interest.paid_counts = (ssss.interest.paid_counts + round(count_cal))
-                                    ssss.save()
-                                    temp_family.no_count_install = temp_family.no_count_install + round(count_cal)
+                                    festival_get.balance_amt = float(festival_get.balance_amt) - _amt
+                                    festival_get.debit_amt = float(festival_get.debit_amt) + _amt
+                                    festival_get.save()
+                                    count_cal = _amt / float(interest_obj.installment_amt)
+                                    # save the LOAN (interest_obj), not the balance sheet
+                                    interest_obj.paid_counts = int(interest_obj.paid_counts or 0) + round(count_cal)
+                                    interest_obj.save()
+                                    temp_family.no_count_install = int(temp_family.no_count_install or 0) + round(count_cal)
                                     temp_family.save()
-                                    InterestPeopleReport.objects.create(
-                                        management_profile=festival_get.management_profile,
-                                        interest_id=festival_get.interest.id,
-                                        reportdate=temp_family.created_at.date(), debit_amt=festival_get.debit_amt,
-                                        balance_amt=festival_get.balance_amt, type_choice="Payment",
-                                        created_by=rejin.id, collection=temp_family)
+                                    _interest_profit = (float(interest_obj.interest_amt) / int(
+                                        interest_obj.interest_period)) * int(count_cal)
 
-                                chit_fund_obj = ChitFundsDetails.objects.filter(
-                                    id=temp_family.interest.chitt_fund.id)
-                                if chit_fund_obj:
-                                    chit_fund_get = ChitFundsDetails.objects.get(
-                                        id=temp_family.interest.chitt_fund.id)
+                                InterestPeopleReport.objects.create(
+                                    management_profile=festival_get.management_profile,
+                                    interest_id=festival_get.interest.id,
+                                    reportdate=temp_family.pay_date, debit_amt=_amt,
+                                    balance_amt=festival_get.balance_amt, type_choice="Payment",
+                                    created_by=rejin.id, collection=temp_family)
+
+                                chit_fund_get = None
+                                _chit = temp_family.interest.chitt_fund
+                                if _chit is not None:
+                                    chit_fund_get = ChitFundsDetails.objects.filter(id=_chit.id).first()
+                                if chit_fund_get is not None:
                                     if ssss.interest.interest_category in ("Interest", "Interest with capital"):
                                         chit_fund_get.cash_inhand_amount = float(
-                                            chit_fund_get.cash_inhand_amount) + float(temp_family.amount)
-                                        chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) + float(
-                                            temp_family.amount)
-                                        chit_fund_get.save()
-                                    elif ssss.interest.interest_category == "Installment Interest":
-                                        calculate_proft_for_intallment = float(temp_family.amount) / float(
-                                            ssss.interest.installment_amt)
-                                        interest_amount_install_profit = (float(ssss.interest.interest_amt) / int(
-                                            ssss.interest.interest_period)) * int(calculate_proft_for_intallment)
+                                            chit_fund_get.cash_inhand_amount) + _amt
+                                        chit_fund_get.profit_amount = float(
+                                            chit_fund_get.profit_amount) + _amt
+                                    else:
                                         chit_fund_get.collected_principal_amount = float(
-                                            chit_fund_get.collected_principal_amount) + float(
-                                            temp_family.amount) - interest_amount_install_profit
+                                            chit_fund_get.collected_principal_amount) + _amt - _interest_profit
                                         chit_fund_get.cash_inhand_amount = float(
-                                            chit_fund_get.cash_inhand_amount) + float(temp_family.amount)
-                                        chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) + float(
-                                            interest_amount_install_profit)
-                                        chit_fund_get.save()
+                                            chit_fund_get.cash_inhand_amount) + _amt
+                                        chit_fund_get.profit_amount = float(
+                                            chit_fund_get.profit_amount) + _interest_profit
+                                    chit_fund_get.save()
 
-                                invester_list = ChitFundInvesters.objects.filter(chitt_fund=chit_fund_get, action=True)
-                                if ssss.interest.interest_category == "Installment Interest":
-                                    final_profit_amount1 = (float(interest_amount_install_profit) * float(
-                                        chit_fund_get.set_profit_percent / 100))
-                                elif ssss.interest.interest_category in ("Interest", "Interest with capital"):
-                                    final_profit_amount1 = (float(temp_family.amount) * float(
-                                        chit_fund_get.set_profit_percent / 100))
-                                final_profit_amount = round((final_profit_amount1), 2)
+                                    # Share ONLY the profit part with management and investors
+                                    _final_profit = round(
+                                        _interest_profit * float(chit_fund_get.set_profit_percent / 100), 2)
+                                    _members = chit_fund_get.total_share_count
+                                    _shared = round(
+                                        (_interest_profit - _final_profit) / _members, 2) if _members else 0.0
+                                    chit_fund_get.management_amount = (
+                                        float(chit_fund_get.management_amount) + _final_profit
+                                        + float(chit_fund_get.management_share_count) * _shared)
+                                    chit_fund_get.save()
+                                    for ii in ChitFundInvesters.objects.filter(
+                                            chitt_fund=chit_fund_get, action=True):
+                                        ii.collected_share_amount = float(
+                                            ii.collected_share_amount) + float(ii.share_count) * _shared
+                                        ii.save()
 
-                                chit_fund_get.management_amount = float(chit_fund_get.management_amount) + float(
-                                    final_profit_amount)
-                                chit_fund_get.save()
-                                balance_profit_amount = float(temp_family.amount) - final_profit_amount
-                                member_count = chit_fund_get.total_share_count
-                                shared_amount1 = balance_profit_amount / (member_count)
-                                shared_amount = round((shared_amount1), 2)
-                                chit_fund_get.management_amount = (float(chit_fund_get.management_amount) + (
-                                            (chit_fund_get.management_share_count) * float(shared_amount)))
-                                chit_fund_get.save()
-                                for ii in invester_list:
-                                    ii.collected_share_amount = float(ii.collected_share_amount) + (
-                                                float(ii.share_count) * float(shared_amount))
-                                    ii.save()
-
-                                ChitFundInterestOverallReport.objects.create(chitfund=temp_family.chitt_fund,
-                                                                             management_profile=management,
-                                                                             created_by=rejin.id,
-                                                                             collection=temp_family,
-                                                                             amount=temp_family.amount,
-                                                                             interest=temp_family.interest,
-                                                                             income_choice="Addition")
+                                    ChitFundInterestOverallReport.objects.create(
+                                        chitfund=chit_fund_get, management_profile=management,
+                                        created_by=rejin.id, collection=temp_family, amount=_amt,
+                                        interest=temp_family.interest, income_choice="Addition")
 
                     else:
                         import json
@@ -2402,6 +2388,12 @@ def edit_collections_details(request, pk):
                                     new_pro_amount = float(customer.no_count_install) * float(
                                         interest_obj.fix_interest_rate_percent / interest_obj.interest_period)
                                 new_principal_amt = float(customer.amount) - new_pro_amount
+                                # FIX 1 (mirror of POST): a penalty-only collection on an
+                                # Installment loan never added installment profit or principal,
+                                # so there is nothing of that kind to subtract here.
+                                if customer.interest_field and not customer.interest_principle:
+                                    new_pro_amount = 0.0
+                                    new_principal_amt = 0.0
 
                                 # FIX (cash_inhand_amount under-reversal): POST's
                                 # Installment Interest branch credits
@@ -2458,6 +2450,30 @@ def edit_collections_details(request, pk):
                                     chit_fund_get.profit_amount = float(chit_fund_get.profit_amount) - float(
                                         customer.interst_amount) - float(customer.penalty_amount) + _discount
                                 chit_fund_get.save()
+
+                            # FIX 2: reverse the management / investor profit shares that
+                            # POST added (mirrors the share maths in add_collection_details).
+                            _pen_del = float(customer.penalty_amount or 0)
+                            if interest_obj.interest_category == "Installment Interest":
+                                _share_base = float(new_pro_amount) + _pen_del
+                            else:
+                                _share_base = float(customer.interst_amount or 0) + _pen_del
+                            _final_profit = round(
+                                _share_base * float(chit_fund_get.set_profit_percent / 100), 2)
+                            _members = chit_fund_get.total_share_count
+                            _shared = round((_share_base - _final_profit) / _members, 2) if _members else 0.0
+                            chit_fund_get.management_amount = max(
+                                0.0,
+                                float(chit_fund_get.management_amount) - _final_profit
+                                - float(chit_fund_get.management_share_count) * _shared,
+                            )
+                            chit_fund_get.save()
+                            for _inv in ChitFundInvesters.objects.filter(chitt_fund=chit_fund_get, action=True):
+                                _inv.collected_share_amount = max(
+                                    0.0,
+                                    float(_inv.collected_share_amount) - float(_inv.share_count) * _shared,
+                                )
+                                _inv.save()
 
                         # festival_get.credit_amt = float(festival_get.credit_amt)-float(customer.amount)
                         # FIX (discount revert): the branches above already
@@ -2624,7 +2640,6 @@ def edit_collections_details(request, pk):
                 customer.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
         return Response({'message': "un-authenticate"}, status.HTTP_401_UNAUTHORIZED)
-
 
 @api_view(['GET', 'POST'])
 def get_select_type(request):
@@ -4385,7 +4400,76 @@ def chitfund_interest_member_details(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-# filter chit name based on category type
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
+
+# These imports already exist at the top of your collection views file.
+# Listed here only so it is clear what this function depends on:
+#
+# from token_app.views import token_checking
+# from management.models import ManagementDetails
+# from permisions.models import Permisions
+# from interest.models import PeopleInterestDetails
+# from interest.serializers import PeopleInterestDetailsSerializer
+# from balancesheet.models import PeopleInterestBalanceSheet
+# from .models import CollectionDetails
+# (and the _installment_expected_count helper defined above in the same file)
+
+CHIT_FUND_INTEREST = "Chit fund Interest"   # value stored in PeopleInterestDetails.interest_type
+
+
+def _chit_base_queryset(management, interest_category, interest_type, chit_fund_id, chit_name):
+    """Base queryset of active interests for the chosen category/type.
+
+    When the type is Chit fund Interest the result is ALWAYS scoped to the
+    selected chit fund and chit name (this was the bug: the old code compared
+    against "Chit Interest" after the value had already been converted to
+    "Chit fund Interest", so the scoping never happened).
+    """
+    qs = PeopleInterestDetails.objects.filter(
+        action=True,
+        management_profile=management,
+        interest_category=interest_category,
+        interest_type=interest_type,
+    )
+    if interest_type == CHIT_FUND_INTEREST:
+        qs = qs.filter(chitt_fund_id=chit_fund_id, chit_name=chit_name)
+    return qs
+
+
+def _installment_due_in_window(interest, balance, checking_date, unit):
+    """Principal-only Installment logic for Month / Week loans.
+
+    unit is "months" or "weeks". Returns True when the borrower should be
+    listed: the payment for the current period window has not been made yet
+    and installments are still remaining.
+    """
+    paid_counts = int(interest.paid_counts or 0)
+    total = int(interest.interest_period or 0)
+    if paid_counts >= total:
+        return False
+
+    step = 30 if unit == "months" else 7
+    elapsed = abs(interest.interest_date - checking_date).days // step
+
+    window_start = interest.interest_date + relativedelta(**{unit: elapsed})
+    window_end = interest.interest_date + relativedelta(**{unit: elapsed + 1})
+
+    last_collection = CollectionDetails.objects.filter(interest_id=interest.id).last()
+    if last_collection is not None:
+        last_payment_date = last_collection.pay_date
+        return not (window_start <= last_payment_date < window_end)
+
+    # No collection yet
+    if elapsed > 0:
+        expected_date = balance.interest_apply_date + relativedelta(**{unit: paid_counts})
+        return not (window_start <= expected_date < window_end)
+    return False
+
+
 @api_view(['GET', 'POST'])
 def chitname_withfiltering_category(request):
     rejin = token_checking(request)
@@ -4394,511 +4478,193 @@ def chitname_withfiltering_category(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
-    if rejin.my_role != None:
+    if rejin.my_role is not None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
             perm = Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management = ManagementDetails.objects.all()
     if not check_management:
-        dict6 = {}
-        dict6['message'] = "First Add Management Profile details"
-        return Response(dict6, status=status.HTTP_406_NOT_ACCEPTABLE)
-    else:
-        management = ManagementDetails.objects.all().first()
+        return Response({"message": "First Add Management Profile details"},
+                        status=status.HTTP_406_NOT_ACCEPTABLE)
+    management = ManagementDetails.objects.all().first()
 
-    if request.method == "POST":
-        interest_category = request.data['interest_category']
-        interest_type = request.data['interest_type']
-        if interest_type == "Chit Interest":
-            interest_type = "Chit fund Interest"
-            type1 = request.data['type']
-            chit_name = request.data['chit_name']
+    if request.method != "POST":
+        return Response([], status=status.HTTP_200_OK)
 
-        # Owner rule (Feb 2026): honour the collection form's selected
-        # `pay_date` so the "Choose Person" dropdown only lists borrowers
-        # whose installment is due on-or-before that date. Falls back to
-        # today when the frontend doesn't send `selected_date` (legacy
-        # callers / cron jobs).
-        _sel = request.data.get('selected_date')
-        checking_date = date.today()
-        if _sel:
+    interest_category = request.data['interest_category']
+    interest_type = request.data['interest_type']
+
+    # Frontend sends "Chit Interest" (collection_category name); the interest
+    # table stores "Chit fund Interest".
+    chit_fund_id = None
+    chit_name = None
+    if interest_type in ("Chit Interest", CHIT_FUND_INTEREST):
+        interest_type = CHIT_FUND_INTEREST
+        chit_fund_id = request.data.get('type')
+        chit_name = request.data.get('chit_name')
+        if not chit_fund_id or not chit_name:
+            return Response({"message": "Chit fund and chit name are required"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    # Honour the collection form's selected pay_date (falls back to today).
+    checking_date = date.today()
+    _sel = request.data.get('selected_date')
+    if _sel:
+        try:
+            checking_date = datetime.strptime(_sel, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            checking_date = date.today()
+
+    interest_principle = request.data.get('interest_principle', False)
+    interest_field = request.data.get('interest_field', False)
+
+    fund_mem_list = []   # always defined, so no NameError for unexpected input
+
+    # ------------------------------------------------------------------
+    # Interest / Interest with capital
+    # ------------------------------------------------------------------
+    if interest_category in ["Interest", "Interest with capital"]:
+        fund_member = _chit_base_queryset(
+            management, interest_category, interest_type, chit_fund_id, chit_name)
+
+        for fund in fund_member:
             try:
-                checking_date = datetime.strptime(_sel, "%Y-%m-%d").date()
-            except (TypeError, ValueError):
-                checking_date = date.today()
+                balance_qs = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
+                has_balance_sheet = balance_qs.exists()
+                mem_obj = balance_qs.get() if has_balance_sheet else None
 
-        checking_date_month = checking_date.month
-        checking_date_year = checking_date.year
-        checking_date_date = checking_date.day
-
-        if interest_category in ["Interest", "Interest with capital"]:
-            fund_mem_list = []
-            interest_principle = request.data['interest_principle']
-            interest_field = request.data['interest_field']
-
-            # Base query for fund members
-            if interest_type == "Chit fund Interest":
-                fund_member = PeopleInterestDetails.objects.filter(
-                    chitt_fund_id=type1, action=True, management_profile=management,
-                    chit_name=chit_name, interest_category=interest_category, interest_type=interest_type
-                )
-            else:
-                fund_member = PeopleInterestDetails.objects.filter(
-                    action=True, management_profile=management,
-                    interest_category=interest_category, interest_type=interest_type
-                )
-
-            for fund in fund_member:
-                try:
-                    mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
-                    has_balance_sheet = mem_obj1.exists()
-                    mem_obj = mem_obj1.get() if has_balance_sheet else None
-
-                    if interest_category == "Interest with capital":
-                        # Include records even without a balance sheet if they are
-                        # eligible.
-                        #
-                        # FIX (Sept 2026 — COLLECTIONS_003): previously only
-                        # `interest_field=True` triggered this no-balance-sheet
-                        # fallback, so a brand-new "Interest with capital" loan
-                        # (no PeopleInterestBalanceSheet row yet) was INVISIBLE
-                        # whenever the operator was trying to collect PRINCIPAL
-                        # (`interest_principle=True`, `interest_field=False`).
-                        # Principal collection was impossible on such a loan
-                        # until a balance sheet row happened to exist.
-                        if not has_balance_sheet:
-                            if interest_field or interest_principle:
-                                print(f"Adding fund {fund.id} to fund_mem_list (no balance sheet yet)")
-                                fund_mem_list.append(fund)
-                            continue
-
-                        # For records with a balance sheet, check balances.
-                        #
-                        # FIX (Sept 2026 — COLLECTIONS_003): principal
-                        # visibility used to be folded into the SAME "next
-                        # interest due date" gate as interest/penalty. Whether
-                        # principal is owed is a fact about the loan balance,
-                        # not about the interest billing cycle, so a borrower
-                        # with `principal_balance > 0` must be shown regardless
-                        # of the interest due date — otherwise nobody appears
-                        # in "Choose Person" until the interest cycle happens
-                        # to roll over.
-                        if interest_principle and mem_obj.principal_balance > 0:
-                            print(f"Adding fund {fund.id} to fund_mem_list for Interest with capital (principal)")
+                if interest_category == "Interest with capital":
+                    if not has_balance_sheet:
+                        if interest_field or interest_principle:
                             fund_mem_list.append(fund)
-                        elif interest_field and (mem_obj.intrest_balance_amt > 0 or mem_obj.penalty_balance_amt > 0):
-                            # Check if the interest/penalty payment is due.
-                            #
-                            # FIX (Sept 2026 — COLLECTIONS_003): the old check
-                            # compared year and month as two INDEPENDENT
-                            # inequalities:
-                            #     next_due_date.year <= checking_date_year and
-                            #     next_due_date.month <= checking_date_month
-                            # which is NOT equivalent to comparing the date as
-                            # a whole. Example: next_due_date = Dec 2025,
-                            # checking_date = Sept 2026:
-                            #     year:  2025 <= 2026  -> True
-                            #     month: 12   <= 9     -> False -> excluded,
-                            # even though Dec 2025 is long overdue relative to
-                            # Sept 2026. Comparing the dates directly fixes
-                            # this for every year/month combination.
-                            apply_date = mem_obj.interest_apply_date
-                            next_due_date = apply_date + relativedelta(months=1)
-                            if next_due_date <= checking_date:
-                                print(f"Adding fund {fund.id} to fund_mem_list for Interest with capital (interest/penalty)")
-                                fund_mem_list.append(fund)
-                    elif interest_category == "Interest":
-                        if not has_balance_sheet:
-                            print(f"Skipping fund {fund.id} for Interest (no balance sheet)")
-                            continue
-
-                        if interest_principle and not interest_field:
-                            if mem_obj.principal_balance > 0:
-                                fund_mem_list.append(fund)
-                        elif not interest_principle and interest_field:
-                            if mem_obj.penalty_balance_amt > 0 or mem_obj.intrest_balance_amt > 0:
-                                apply_date = mem_obj.interest_apply_date
-                                next_due_date = apply_date + relativedelta(months=1)
-                                if next_due_date.year == checking_date_year and \
-                                   next_due_date.month == checking_date_month:
-                                    fund_mem_list.append(fund)
-                        elif interest_principle and interest_field:
-                            if mem_obj.principal_balance > 0 or \
-                               mem_obj.penalty_balance_amt > 0 or \
-                               mem_obj.intrest_balance_amt > 0:
-                                apply_date = mem_obj.interest_apply_date
-                                next_due_date = apply_date + relativedelta(months=1)
-                                if next_due_date.year == checking_date_year and \
-                                   next_due_date.month == checking_date_month:
-                                    fund_mem_list.append(fund)
-                except Exception as e:
-                    print(f"Error processing fund {fund.id}: {e}")
-                    continue
-
-            # -------------------------------------------------------------
-            # Owner rule (Feb 2026): Date-scoped post-filter for
-            # non-installment interest (Interest / Interest with capital).
-            # A row stays visible if the next expected interest apply
-            # date is on-or-before the operator's selected date, OR the
-            # borrower owes penalty / interest right now.
-            #
-            # FIX (Sept 2026 — COLLECTIONS_003): this post-filter used to
-            # apply to EVERY row in fund_mem_list unconditionally, which
-            # meant a borrower added above specifically for an outstanding
-            # PRINCIPAL balance (Interest with capital, principal-only
-            # collection) could still get dropped here just because their
-            # interest isn't due yet. Principal collection must never be
-            # gated by the interest due-date — skip this filter for rows
-            # where we're collecting principal only and principal is owed.
-            _filtered = []
-            for _f in fund_mem_list:
-                try:
-                    _bs = PeopleInterestBalanceSheet.objects.filter(interest_id=_f.id).first()
-                    _pen = float(_bs.penalty_balance_amt or 0) if _bs else 0.0
-                    _int = float(_bs.intrest_balance_amt or 0) if _bs else 0.0
-                    _prin = float(_bs.principal_balance or 0) if _bs else 0.0
-                    if interest_principle and not interest_field and _prin > 0:
-                        _filtered.append(_f)
                         continue
-                    if not (_pen > 0 or _int > 0) and _bs and _bs.interest_apply_date:
-                        _next_due = _bs.interest_apply_date + relativedelta(months=1)
-                        if _next_due > checking_date:
-                            continue
-                except Exception:
-                    pass
-                _filtered.append(_f)
-            fund_mem_list = _filtered
 
-            serializer = PeopleInterestDetailsSerializer(fund_mem_list, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        elif interest_category == "Installment Interest":
+                    # Principal owed is independent of the interest cycle.
+                    if interest_principle and mem_obj.principal_balance > 0:
+                        fund_mem_list.append(fund)
+                    elif interest_field and (mem_obj.intrest_balance_amt > 0
+                                             or mem_obj.penalty_balance_amt > 0):
+                        next_due_date = mem_obj.interest_apply_date + relativedelta(months=1)
+                        if next_due_date <= checking_date or mem_obj.penalty_balance_amt > 0:
+                            fund_mem_list.append(fund)
 
-            interest_principle = request.data['interest_principle']
-            interest_field = request.data['interest_field']
-            if interest_principle == True and interest_field == False:
-                if interest_type == "Chit Interest":
-                    fund_member = PeopleInterestDetails.objects.filter(chitt_fund_id=type1, action=True,
-                                                                       management_profile=management,
-                                                                       chit_name=chit_name,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-                else:
-                    fund_member = PeopleInterestDetails.objects.filter(action=True, management_profile=management,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
+                elif interest_category == "Interest":
+                    if not has_balance_sheet:
+                        continue
 
-                fund_mem_list = []
-                for fund in fund_member:
-                    mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
-                    if mem_obj1:
-                        mem_obj = PeopleInterestBalanceSheet.objects.get(interest_id=fund.id)
+                    next_due_date = mem_obj.interest_apply_date + relativedelta(months=1)
+                    due_this_month = next_due_date <= checking_date
 
-                        nnnn = mem_obj.interest.paid_counts
+                    if interest_principle and not interest_field:
+                        if mem_obj.principal_balance > 0:
+                            fund_mem_list.append(fund)
+                    elif not interest_principle and interest_field:
+                        if (mem_obj.penalty_balance_amt > 0 or mem_obj.intrest_balance_amt > 0) \
+                                and (due_this_month or mem_obj.penalty_balance_amt > 0):
+                            fund_mem_list.append(fund)
+                    elif interest_principle and interest_field:
+                        if (mem_obj.principal_balance > 0
+                                or mem_obj.penalty_balance_amt > 0
+                                or mem_obj.intrest_balance_amt > 0) \
+                                and (due_this_month or mem_obj.penalty_balance_amt > 0):
+                            fund_mem_list.append(fund)
+            except Exception as e:
+                print(f"Error processing fund {fund.id}: {e}")
+                continue
 
-                        # Owner rule (Feb 2026): use the operator's
-                        # selected `checking_date` for the current
-                        # month/year window so the "Choose Person"
-                        # dropdown reflects the picked pay_date, not
-                        # today.
-                        month = checking_date.month
-                        year = checking_date.year
-                        number_of_days = calendar.monthrange(year, month)[1]
-                        first_date = date(year, month, 1)
-                        last_date = date(year, month, number_of_days)
-                        delta = last_date - first_date
-                        final_dates = []
-                        for i in range(delta.days + 1):
-                            final_dates.append((first_date + timedelta(days=i)))
+        # Date-scoped post-filter (principal-only collection is never gated
+        # by the interest due date).
+        _filtered = []
+        for _f in fund_mem_list:
+            try:
+                _bs = PeopleInterestBalanceSheet.objects.filter(interest_id=_f.id).first()
+                _pen = float(_bs.penalty_balance_amt or 0) if _bs else 0.0
+                _int = float(_bs.intrest_balance_amt or 0) if _bs else 0.0
+                _prin = float(_bs.principal_balance or 0) if _bs else 0.0
+                if interest_principle and not interest_field and _prin > 0:
+                    _filtered.append(_f)
+                    continue
+                if not (_pen > 0 or _int > 0) and _bs and _bs.interest_apply_date:
+                    _next_due = _bs.interest_apply_date + relativedelta(months=1)
+                    if _next_due > checking_date:
+                        continue
+            except Exception:
+                pass
+            _filtered.append(_f)
 
-                        last_day_of_month = calendar.monthrange(year, month)[1]
-                        last_date = datetime(year, month, last_day_of_month)
-                        start_date = datetime(year, month, 1)
+        serializer = PeopleInterestDetailsSerializer(_filtered, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
+    # ------------------------------------------------------------------
+    # Installment Interest
+    # ------------------------------------------------------------------
+    elif interest_category == "Installment Interest":
+        fund_member = _chit_base_queryset(
+            management, interest_category, interest_type, chit_fund_id, chit_name)
 
-                        if mem_obj.interest.interest_period_type == "Month":
-                            print("Processing interest period in months...")
+        for fund in fund_member:
+            mem_obj = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id).first()
+            if not mem_obj:
+                continue
+            interest = mem_obj.interest
 
-                            try:
-                                # Retrieve collection details for the interest
-                                checking_collection_months = CollectionDetails.objects.filter(
-                                    interest_id=mem_obj.interest_id
-                                )
+            try:
+                # Principal only
+                if interest_principle == True and interest_field == False:
+                    ptype = interest.interest_period_type
+                    if ptype == "Month":
+                        if _installment_due_in_window(interest, mem_obj, checking_date, "months"):
+                            fund_mem_list.append(interest)
+                    elif ptype == "Week":
+                        if _installment_due_in_window(interest, mem_obj, checking_date, "weeks"):
+                            fund_mem_list.append(interest)
+                    elif ptype == "Days":
+                        expected = _installment_expected_count(interest, checking_date)
+                        if int(interest.paid_counts or 0) < expected:
+                            fund_mem_list.append(interest)
 
-                                terminating_date = mem_obj.interest.interest_date + relativedelta(
-                                    months=mem_obj.interest.interest_period
-                                )
+                # Penalty only
+                elif interest_principle == False and interest_field == True:
+                    if mem_obj.penalty_balance_amt > 0:
+                        fund_mem_list.append(interest)
 
-                                # Calculate the number of months since the interest started.
-                                # FIX (Sept 2026): use the operator's selected checking_date
-                                # instead of date.today() so this stays consistent with the
-                                # "picked pay_date" rule applied everywhere else in this
-                                # function — backdated collections should compute the period
-                                # window relative to the date the operator chose, not the
-                                # real calendar date.
-                                calcu_months = abs(mem_obj.interest.interest_date - checking_date)
-                                months_num = calcu_months.days // 30  # Approximate month count
+                # Principal + penalty
+                elif interest_principle == True and interest_field == True:
+                    has_balance = (
+                        float(mem_obj.penalty_balance_amt or 0) > 0
+                        or float(mem_obj.intrest_balance_amt or 0) > 0
+                        or float(mem_obj.principal_balance or 0) > 0
+                    )
+                    if not has_balance:
+                        continue
+                    expected = _installment_expected_count(interest, checking_date)
+                    if float(mem_obj.penalty_balance_amt or 0) > 0 \
+                            or int(interest.paid_counts or 0) < expected:
+                        fund_mem_list.append(interest)
+            except Exception as e:
+                print(f"Error processing installment interest {fund.id}: {e}")
+                continue
 
-                                checking_days_months = (
-                                    mem_obj.interest.interest_date + relativedelta(months=months_num)
-                                )
-                                checking_days_months_limit = (
-                                    mem_obj.interest.interest_date + relativedelta(months=months_num + 1)
-                                )
+        # Date-scoped post-filter: hide anyone whose next installment is not
+        # due yet on the selected date, unless penalty/interest is owed.
+        _filtered = []
+        for _f in fund_mem_list:
+            try:
+                _bs = PeopleInterestBalanceSheet.objects.filter(interest_id=_f.id).first()
+                _pen = float(_bs.penalty_balance_amt or 0) if _bs else 0.0
+                _int = float(_bs.intrest_balance_amt or 0) if _bs else 0.0
+                if _f.installment_date and not (_pen > 0 or _int > 0):
+                    if _f.installment_date > checking_date:
+                        continue
+            except Exception:
+                pass
+            _filtered.append(_f)
 
-                                dates = []
-                                current_date = checking_days_months
+        serializer = PeopleInterestDetailsSerializer(_filtered, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-                                # Generate valid dates within the month range
-                                while current_date < checking_days_months_limit:
-                                    dates.append(current_date)
-                                    current_date += timedelta(days=1)
-
-                                if checking_collection_months.exists():
-                                    # Collection records exist
-                                    checking_collection_month = checking_collection_months.last()
-                                    last_payment_date = checking_collection_month.pay_date
-
-                                    if (
-                                        last_payment_date not in dates
-                                        and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
-                                    ):
-                                        # Check if terminating_date has passed but payments are still pending
-                                        if terminating_date < checking_date:
-                                            print("Interest period is over but payments are still pending.")
-                                        fund_mem_list.append(mem_obj.interest)
-                                else:
-                                    # Handle case where no collections exist
-                                    if months_num > 0:
-                                        print(
-                                            mem_obj.interest_apply_date
-                                            + relativedelta(months=mem_obj.interest.paid_counts)
-                                        )
-
-                                        if (
-                                            (mem_obj.interest_apply_date + relativedelta(
-                                                months=mem_obj.interest.paid_counts
-                                            )) not in dates
-                                            and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
-                                        ):
-                                            # Check if terminating_date has passed but payments are still pending
-                                            if terminating_date < checking_date:
-                                                print("Interest period is over but payments are still pending.")
-                                            fund_mem_list.append(mem_obj.interest)
-
-                            except Exception as e:
-                                print(f"Error processing interest period in months: {e}")
-
-                        elif mem_obj.interest.interest_period_type == "Days":
-                            # CHIT_FUND_002 fix (Feb 2026): the old logic compared
-                            # last_payment_date < next_expected_payment_date which
-                            # fails whenever the payment is made ON the expected date
-                            # (e.g. interest_date=Jan31, first payment on Feb1 →
-                            # next_expected=Feb1, last_payment=Feb1 → Feb1 < Feb1 = False).
-                            # Use the same _installment_expected_count helper already
-                            # used in chitfund_interest_member_details for consistency:
-                            # show the borrower whenever today's cumulative day-count
-                            # exceeds their paid_counts (helper caps at interest_period
-                            # so overdue borrowers with remaining installments still appear).
-                            #
-                            # FIX (Sept 2026): pass checking_date, not date.today() —
-                            # this branch previously computed "due" relative to the
-                            # real calendar date even though the operator may have
-                            # picked an earlier pay_date, inconsistent with every
-                            # other branch in this function.
-                            expected = _installment_expected_count(mem_obj.interest, checking_date)
-                            if int(mem_obj.interest.paid_counts or 0) < expected:
-                                fund_mem_list.append(mem_obj.interest)
-
-
-                        elif mem_obj.interest.interest_period_type == "Week":
-                            print("Processing interest period in weeks...")
-
-                            try:
-                                # Retrieve collection details for the interest
-                                checking_collection_weeks = CollectionDetails.objects.filter(
-                                    interest_id=mem_obj.interest_id
-                                )
-
-                                terminating_date = mem_obj.interest.interest_date + relativedelta(
-                                    weeks=mem_obj.interest.interest_period
-                                )
-                                # FIX (Sept 2026): checking_date instead of date.today(),
-                                # same reasoning as the Month branch above.
-                                calcu_weeks = abs(mem_obj.interest.interest_date - checking_date)
-                                weeks_num = calcu_weeks.days // 7
-                                checking_days_weeks = (
-                                        mem_obj.interest.interest_date + relativedelta(weeks=weeks_num)
-                                )
-                                checking_days_weeks_limit = (
-                                        mem_obj.interest.interest_date + relativedelta(weeks=weeks_num + 1)
-                                )
-                                dates = []
-                                current_date = checking_days_weeks
-
-                                # Generate valid dates within the week range
-                                while current_date < checking_days_weeks_limit:
-                                    dates.append(current_date)
-                                    current_date += timedelta(days=1)
-
-                                if checking_collection_weeks.exists():
-                                    # Collection records exist
-                                    checking_collection_week = checking_collection_weeks.last()
-                                    last_payment_date = checking_collection_week.pay_date
-
-                                    if (
-                                            last_payment_date not in dates
-                                            and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
-                                    ):
-                                        # Check if terminating_date has passed but payments are still pending
-                                        if terminating_date < checking_date:
-                                            print("Interest period is over but payments are still pending.")
-                                        fund_mem_list.append(mem_obj.interest)
-                                else:
-                                    # Handle case where no collections exist
-                                    if weeks_num > 0:
-                                        print(
-                                            mem_obj.interest_apply_date
-                                            + relativedelta(weeks=mem_obj.interest.paid_counts)
-                                        )
-
-                                        if (
-                                                (mem_obj.interest_apply_date + relativedelta(
-                                                    weeks=mem_obj.interest.paid_counts
-                                                )) not in dates
-                                                and mem_obj.interest.paid_counts < mem_obj.interest.interest_period
-                                        ):
-                                            # Check if terminating_date has passed but payments are still pending
-                                            if terminating_date < checking_date:
-                                                print("Interest period is over but payments are still pending.")
-                                            fund_mem_list.append(mem_obj.interest)
-
-                            except Exception as e:
-                                print(f"Error processing interest period in weeks: {e}")
-
-            elif interest_principle == False and interest_field == True:
-
-                if interest_type == "Chit Interest":
-                    fund_member = PeopleInterestDetails.objects.filter(chitt_fund_id=type1, action=True,
-                                                                       management_profile=management,
-                                                                       chit_name=chit_name,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-                else:
-                    fund_member = PeopleInterestDetails.objects.filter(action=True, management_profile=management,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-
-                fund_mem_list = []
-                for fund in fund_member:
-                    mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
-                    if mem_obj1:
-                        mem_obj = PeopleInterestBalanceSheet.objects.get(interest_id=fund.id)
-                        if mem_obj.penalty_balance_amt > 0:
-                            fund_mem_list.append(mem_obj.interest)
-
-            elif interest_principle == True and interest_field == True:
-
-                # FIX (Sept 2026 — combined Principal+Penalty listing bug):
-                #
-                # This branch previously ran a first loop over fund_member
-                # to build fund_mem_list, containing a Month sub-block that
-                # was accidentally duplicated (two separate
-                # `if interest_period_type == "Month":` blocks, each able to
-                # append the same borrower, with two DIFFERENT and mutually
-                # inconsistent conditions) and a Week sub-block whose
-                # inclusion condition was inverted once a loan passed its
-                # first week (`in dates` instead of `not in dates`).
-                #
-                # However, immediately after that entire loop, the code
-                # re-queried fund_member and did `fund_mem_list = []` again,
-                # discarding everything the first loop computed and
-                # rebuilding the list from scratch in a second loop. So the
-                # duplicate-Month and inverted-Week bugs never actually
-                # reached the response — they were dead code.
-                #
-                # The SECOND loop is what determined the actual response,
-                # and it had a different, more serious bug: for Month it
-                # only included a borrower when
-                # `interest_apply_date + 1 month` fell in the exact same
-                # calendar month/year as the operator's selected date — a
-                # single fixed window that never advances with
-                # `paid_counts`. Once that one month passed, a borrower
-                # behind on payments would never reappear in "Choose
-                # Person" again, no matter how many periods they owed. The
-                # Week case had the same kind of single fixed-week problem.
-                #
-                # Fixed by removing the dead first loop and replacing both
-                # the Month and Week logic in the (now single) loop with
-                # the same due-by-current-period calculation already used
-                # correctly for "Days" (`_installment_expected_count`,
-                # which is period-type aware and accounts for elapsed
-                # installments against `paid_counts`, capped at
-                # `interest_period`). A borrower is now listed exactly when
-                # they owe penalty/interest/principal right now, or they
-                # haven't paid as many installments as their period cadence
-                # says they should have by `checking_date` — for Month,
-                # Week, and Days alike.
-                if interest_type == "Chit Interest":
-                    fund_member = PeopleInterestDetails.objects.filter(chitt_fund_id=type1, action=True,
-                                                                       management_profile=management,
-                                                                       chit_name=chit_name,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-                else:
-                    fund_member = PeopleInterestDetails.objects.filter(action=True, management_profile=management,
-                                                                       interest_category=interest_category,
-                                                                       interest_type=interest_type)
-
-                fund_mem_list = []
-                for fund in fund_member:
-                    mem_obj1 = PeopleInterestBalanceSheet.objects.filter(interest_id=fund.id)
-                    if mem_obj1:
-                        mem_obj = PeopleInterestBalanceSheet.objects.get(interest_id=fund.id)
-
-                        has_balance = (
-                            float(mem_obj.penalty_balance_amt or 0) > 0
-                            or float(mem_obj.intrest_balance_amt or 0) > 0
-                            or float(mem_obj.principal_balance or 0) > 0
-                        )
-                        if not has_balance:
-                            continue
-
-                        expected = _installment_expected_count(mem_obj.interest, checking_date)
-                        if float(mem_obj.penalty_balance_amt or 0) > 0 or int(mem_obj.interest.paid_counts or 0) < expected:
-                            fund_mem_list.append(mem_obj.interest)
-
-            # -------------------------------------------------------------
-            # Owner rule (Feb 2026): Date-scoped post-filter.
-            # After the legacy branches build `fund_mem_list`, drop any
-            # borrower whose next installment isn't due yet on
-            # `checking_date` (the operator's selected pay_date). A row
-            # stays visible if EITHER:
-            #   - `installm` (rolling due-date pointer maintained
-            #     by the interest.signals sync) <= checking_date, OR
-            #   - the borrower owes penalty  (penalty_balance_amt > 0), OR
-            #   - the borrower owes interest (intrest_balance_amt > 0).
-            # Rows whose `installment_date` isn't populated (legacy /
-            # non-installment sources) are left in-place — the older
-            # month/week/day branches already filter them.
-            _filtered = []
-            for _f in fund_mem_list:
-                try:
-                    _bs = PeopleInterestBalanceSheet.objects.filter(interest_id=_f.id).first()
-                    _pen = float(_bs.penalty_balance_amt or 0) if _bs else 0.0
-                    _int = float(_bs.intrest_balance_amt or 0) if _bs else 0.0
-                    if _f.installment_date and not (_pen > 0 or _int > 0):
-                        if _f.installment_date > checking_date:
-                            # Not yet due on the selected date and no
-                            # outstanding penalty/interest — hide.
-                            continue
-                except Exception:
-                    pass
-                _filtered.append(_f)
-            fund_mem_list = _filtered
-
-            serializer = PeopleInterestDetailsSerializer(fund_mem_list, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
+    # Unknown category
+    return Response([], status=status.HTTP_200_OK)
 
 @api_view(['GET', 'POST'])
 def interest_balance_collection(request):
