@@ -1,690 +1,652 @@
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
-from.serializers import ManagementDetailsSerializer,BankDetailsSerializer,InstructionSerializer
-from .models import ManagementDetails,BankDetails,Instructions
-from token_app.views import token_checking, generate_token
-from user.models import User
-from permisions.models import Permisions
-from treasure.models import ManagementBalanceSheet,ManagementTreasure
-import datetime
+
+from token_app.views import token_checking
+from treasure.models import ManagementBalanceSheet, ManagementTreasure
 from chit_fund.models import ChitFundsDetails
 from interest.models import PeopleInterestDetails
 from family.models import Member_Details
 from reports.models import Report
 from amount.models import CashTransactionDetails
 
-@api_view(['GET','POST'])
-def add_management(request):
-    rejin=token_checking(request)
-    if not rejin:
-        return Response({"message":"No User Found"},status=status.HTTP_401_UNAUTHORIZED)
-    if not rejin.is_active:
-        return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
-    print(f'token---{rejin}')
-    get_role=rejin.user_role
-    if request.method =='POST':
-        if get_role=="Admin" or rejin.is_superuser == True:
-            check_management=ManagementDetails.objects.all()
-            if check_management:
-                dict6={}
-                dict6['message']= "Management Profile details already added"
-                # dict6['data']=request.data
-                return Response(dict6,status=status.HTTP_406_NOT_ACCEPTABLE)
-            else:
-                pass            
-            try:
-                print('super human')
-                print(request.data)
-                prod=request.data
-                dict87={}
-                dict87['temple_name']=prod['temple_name']
-                dict87['address']=prod['address']
-                dict87['comments']=prod['comments']
-                dict87['opening_balance']=prod['opening_balance']
-                dict87['tax_age']=prod['tax_age']
-                if prod['opening_balance_type']=='null':
-                    dict87['opening_balance_type']=None
-                else:
-                    dict87['opening_balance_type']=prod['opening_balance_type']
-                try:
-                    dict87['documents']=prod['documents']
-                except Exception:
-                    pass
-                try:
-                    dict87['images']=prod['images']
-                except Exception:
-                    pass
-                print('godd')
-                print(request.data['field_count'])
-                print(type(request.data['field_count']))
-                pc=int(request.data['field_count'])
-                print(pc)
-                print(type(pc))
-                produ_list=[]
-                if pc>=1:
-                    for num in range(1,pc+1):
-                        dict8={}
-                        dict8['bank_name']=prod[f"management[{num}][bank_name]"]
-                        dict8['account_no']=prod[f"management[{num}][account_no]"]
-                        dict8['ifsc']=prod[f"management[{num}][ifsc]"]
-                        dict8['account_holder_name']=prod[f"management[{num}][account_holder_name]"]
-                        dict8['branch_name']=prod[f"management[{num}][branch_name]"]
-                        
-                        dict8['bank_opening_balance_amt']=prod[f"management[{num}][bank_opening_balance_amt]"]
-                        if prod[f"management[{num}][bank_opening_balance_type]"]=='null':
-                            dict8['bank_opening_balance_type']=None
-                        else:
-                            dict8['bank_opening_balance_type']=prod[f"management[{num}][bank_opening_balance_type]"]
-                            
-                        produ_list.append(dict8)         
-                dict87['management']=produ_list
-                print('final')
-                print(dict87)
-            except Exception:
-                return Response({"Message":"Data requirement error"},status=status.HTTP_417_EXPECTATION_FAILED)
-                    
-            serializer876 = ManagementDetailsSerializer(data=dict87)
-            if serializer876.is_valid():
-                temp_family=serializer876.save()
-                temp_family.created_by=rejin.id
-                temp_family.save()
-                
-                if temp_family.opening_balance_type!=None and temp_family.opening_balance!=None and temp_family.opening_balance_type=='Credit' and temp_family.opening_balance>0:    
-                    m_t=ManagementTreasure.objects.create(management_profile=temp_family,cash_in_hand=temp_family.opening_balance)
-                    todayy=timezone.now()
-                    m_bal=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy,opening_balance_type=temp_family.opening_balance_type)
-                    Report.objects.create(type_choice="Addition",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=m_bal)      
-                elif temp_family.opening_balance_type!=None and temp_family.opening_balance!=None and temp_family.opening_balance_type=='Debit' and temp_family.opening_balance>0:
-                    m_t=ManagementTreasure.objects.create(management_profile=temp_family,expence_amt=temp_family.opening_balance)
-                    todayy=timezone.now()
-                    m_ball=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy,opening_balance_type=temp_family.opening_balance_type)
-                    Report.objects.create(type_choice="Reduction",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=m_ball)      
-                else:
-                    m_t=ManagementTreasure.objects.create(management_profile=temp_family)
+from .models import ManagementDetails, BankDetails, Instructions, OpeningBalanceAdjustment
+from .serializers import ManagementDetailsSerializer, BankDetailsSerializer, InstructionSerializer
 
-                bank=BankDetails.objects.filter(management=temp_family)
-                if bank:
-                    for bank_det in bank:
-                        bank_obj=BankDetails.objects.get(id=bank_det.id)
-                        if bank_obj.bank_opening_balance_type == "Credit":
-                            if bank_obj.bank_opening_balance_amt>0:
-                                bank_obj.credit_amt=float(bank_obj.credit_amt) + float(bank_obj.bank_opening_balance_amt)
-                                bank_obj.save()
-                                m_t.bank_amt=float(m_t.bank_amt)+float(bank_obj.bank_opening_balance_amt)
-                                m_t.save()
-                                Report.objects.create(type_choice="Addition",banks=bank_obj,management_profile=temp_family,amount=bank_obj.bank_opening_balance_amt,created_by=rejin.id,managee=True)
-                            else:
-                                pass
-                        elif bank_obj.bank_opening_balance_type == "Debit":
-                            bank_obj.loan_amt=float(bank_obj.loan_amt) + float(bank_obj.bank_opening_balance_amt)
-                            bank_obj.save()
-                            m_t.loan_amt=float(m_t.loan_amt)+float(bank_obj.bank_opening_balance_amt)
-                            m_t.save()
-                            Report.objects.create(type_choice="Reduction",banks=bank_obj,management_profile=temp_family,amount=bank_obj.bank_opening_balance_amt,created_by=rejin.id,managee=True)
-                            
-                return Response(serializer876.data,status=status.HTTP_201_CREATED)
-            else:
-                return Response(serializer876.errors,status=status.HTTP_400_BAD_REQUEST)
-        return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
-         
-    elif request.method == 'GET':
-        our_family = ManagementDetails.objects.all().first()
-        serializer = ManagementDetailsSerializer(our_family)
-        return Response(serializer.data,status=status.HTTP_200_OK)
-        
-        
-@api_view(['GET','PUT','PATCH',"DELETE"])
-def edit_management(request,pk):
-    rejin=token_checking(request)
-    if not rejin:
-        return Response({"message":"No User Found"},status=status.HTTP_401_UNAUTHORIZED)
-    if not rejin.is_active:
-        return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
-    get_role=rejin.user_role
+
+CREDIT = 'Credit'
+DEBIT = 'Debit'
+ZERO = Decimal('0')
+EMPTY_VALUES = (None, '', 'null')
+
+
+# ---------------------------------------------------------------------------
+# Common helpers
+# ---------------------------------------------------------------------------
+
+def D(value):
+    """Convert any amount (str / float / Decimal / None) to Decimal safely."""
+    if value in EMPTY_VALUES:
+        return ZERO
     try:
-        customer = ManagementDetails.objects.get(pk=pk)  
-        get_old_balance=customer.opening_balance
-        get_old_bal_type=customer.opening_balance_type
-    except ManagementDetails.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-    
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"Invalid amount: {value}")
+
+
+def authenticate(request):
+    user = token_checking(request)
+    if not user:
+        return None, Response({"message": "No User Found"}, status=status.HTTP_401_UNAUTHORIZED)
+    if not user.is_active:
+        return None, Response({"message": "Not Authorized Please Contact Admin"},
+                              status=status.HTTP_401_UNAUTHORIZED)
+    return user, None
+
+
+def is_admin(user):
+    return user.is_superuser or getattr(user, 'user_role', None) == "Admin"
+
+
+def unauthorized():
+    return Response({'message': "un-authenticate"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+def get_management_or_error():
+    management = ManagementDetails.objects.first()
+    if not management:
+        return None, Response({"message": "First Add Management Profile details"},
+                              status=status.HTTP_406_NOT_ACCEPTABLE)
+    return management, None
+
+
+def read_flag(data, key):
+    """'false' -> False, anything else -> True, missing -> None."""
+    value = data.get(key)
+    if value is None:
+        return None
+    return str(value).lower() != 'false'
+
+
+def clean_type(value):
+    return None if value in EMPTY_VALUES else value
+
+
+# ---------------------------------------------------------------------------
+# Payload parsing
+# ---------------------------------------------------------------------------
+
+def parse_management_payload(data, with_ids=False):
+    """Build the serializer payload from multipart form data. Raises KeyError / ValueError."""
+    payload = {
+        'temple_name': data['temple_name'],
+        'address': data['address'],
+        'comments': data['comments'],
+        'tax_age': data['tax_age'],
+        'opening_balance': data.get('opening_balance'),
+        'opening_balance_type': clean_type(data.get('opening_balance_type')),
+    }
+    if with_ids and data.get('id') not in EMPTY_VALUES:
+        payload['id'] = data.get('id')
+    for key in ('documents', 'images'):
+        if key in data:
+            payload[key] = data[key]
+
+    count = int(data.get('field_count') or 0)
+    banks = []
+    for num in range(1, count + 1):
+        prefix = f"management[{num}]"
+        bank = {
+            'bank_name': data[f"{prefix}[bank_name]"],
+            'account_no': data[f"{prefix}[account_no]"],
+            'ifsc': data[f"{prefix}[ifsc]"],
+            'account_holder_name': data[f"{prefix}[account_holder_name]"],
+            'branch_name': data[f"{prefix}[branch_name]"],
+            'bank_opening_balance_amt': data[f"{prefix}[bank_opening_balance_amt]"],
+            'bank_opening_balance_type': clean_type(data.get(f"{prefix}[bank_opening_balance_type]")),
+        }
+        if with_ids:
+            bank_id = data.get(f"{prefix}[id]")
+            if bank_id not in EMPTY_VALUES:
+                bank['id'] = bank_id
+        banks.append(bank)
+    payload['management'] = banks
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Opening balance rules
+# ---------------------------------------------------------------------------
+
+def normalize_opening_balance(balance, bal_type):
+    """Validate the opening balance. Returns (Decimal balance, type) or raises ValueError."""
+    balance = D(balance)
+    bal_type = clean_type(bal_type)
+    if bal_type not in (None, CREDIT, DEBIT):
+        raise ValueError("Opening balance type must be Credit or Debit")
+    if balance < 0:
+        raise ValueError("Opening balance cannot be negative")
+    if balance > 0 and bal_type is None:
+        raise ValueError("Select Credit or Debit for the opening balance")
+    if balance == 0:
+        bal_type = None
+    return balance, bal_type
+
+
+def treasure_after_change(treasure, old_bal, old_type, new_bal, new_type):
+    """Reverse the old opening balance and apply the new one.
+    Returns (cash, expense, shortfall).
+
+    If the old Credit was already partly used (chit fund, interest, expenses),
+    removing it would make cash negative. Instead of blocking, that used amount
+    ("shortfall") is carried to the debit side, so the temple's net position
+    (cash - expense) stays correct and cash_in_hand never goes below 0."""
+    cash = D(treasure.cash_in_hand)
+    expense = D(treasure.expence_amt)
+    if old_type == CREDIT:
+        cash -= old_bal
+    elif old_type == DEBIT:
+        expense -= old_bal
+    if new_type == CREDIT:
+        cash += new_bal
+    elif new_type == DEBIT:
+        expense += new_bal
+
+    shortfall = ZERO
+    if cash < 0:
+        shortfall = -cash
+        expense += shortfall
+        cash = ZERO
+    if expense < 0:
+        cash += -expense
+        expense = ZERO
+    return cash, expense, shortfall
+
+
+def create_treasure(profile, balance, bal_type):
+    return ManagementTreasure.objects.create(
+        management_profile=profile,
+        cash_in_hand=balance if bal_type == CREDIT else ZERO,
+        expence_amt=balance if bal_type == DEBIT else ZERO,
+    )
+
+
+def sync_opening_balance_sheet(profile, balance, bal_type, user):
+    """Keep EXACTLY ONE opening-balance ManagementBalanceSheet row and ONE Report for it,
+    matching the profile. Extra copies (left by the old code) are removed every time,
+    so the opening balance can never be counted twice."""
+    sheets = (ManagementBalanceSheet.objects
+              .filter(management_profile=profile, managee=True)
+              .order_by('id'))
+    sheet = sheets.first()
+
+    # Remove duplicate opening sheets and their reports
+    if sheet:
+        for extra in sheets.exclude(id=sheet.id):
+            Report.objects.filter(mangebalancesheet=extra).delete()
+            extra.delete()
+
+    if balance <= 0 or bal_type is None:
+        if sheet:
+            Report.objects.filter(mangebalancesheet=sheet).delete()
+            sheet.delete()
+        return
+
+    type_choice = "Addition" if bal_type == CREDIT else "Reduction"
+
+    if sheet:
+        sheet.opening_balance_amt = balance
+        sheet.opening_balance_type = bal_type
+        sheet.save()
+    else:
+        sheet = ManagementBalanceSheet.objects.create(
+            management_profile=profile,
+            managee=True,
+            opening_balance_amt=balance,
+            opening_balance_type=bal_type,
+            date=timezone.now(),
+        )
+
+    # Keep one report for the sheet, remove duplicates
+    reports = Report.objects.filter(mangebalancesheet=sheet).order_by('id')
+    report = reports.first()
+    if report:
+        reports.exclude(id=report.id).delete()
+        report.amount = balance
+        report.type_choice = type_choice
+        report.created_by = user.id
+        report.save()
+    else:
+        Report.objects.create(
+            type_choice=type_choice,
+            management_profile=profile,
+            amount=balance,
+            created_by=user.id,
+            mangebalancesheet=sheet,
+        )
+
+
+class OpeningBalanceError(Exception):
+    def __init__(self, message, code=status.HTTP_409_CONFLICT):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+def change_opening_balance(profile, user, new_bal, new_type, reason):
+    """The ONE place that changes the opening balance.
+    Call inside transaction.atomic() with `profile` locked (select_for_update).
+    Updates profile, treasure, balance sheet, report and history.
+    Returns True if something changed."""
+    old_bal = D(profile.opening_balance)
+    old_type = clean_type(profile.opening_balance_type)
+    if old_bal == new_bal and old_type == new_type:
+        return False
+
+    treasure = (ManagementTreasure.objects.select_for_update()
+                .filter(management_profile=profile).first())
+    if treasure is None:
+        treasure = create_treasure(profile, old_bal, old_type)
+
+    # 1. New totals. Credit <-> Debit and any amount are allowed; money already
+    #    used from an old Credit is carried to the debit side (see treasure_after_change).
+    new_cash, new_expense, shortfall = treasure_after_change(treasure, old_bal, old_type, new_bal, new_type)
+    if shortfall > 0:
+        reason = f"{reason} (already-used amount {shortfall} carried to debit)"
+
+    # 2. Apply
+    profile.opening_balance = new_bal
+    profile.opening_balance_type = new_type
+    profile.save(update_fields=['opening_balance', 'opening_balance_type'])
+
+    treasure.cash_in_hand = new_cash
+    treasure.expence_amt = new_expense
+    treasure.save(update_fields=['cash_in_hand', 'expence_amt'])
+
+    # 3. Balance sheet + report
+    sync_opening_balance_sheet(profile, new_bal, new_type, user)
+
+    # 4. Audit trail
+    OpeningBalanceAdjustment.objects.create(
+        management_profile=profile,
+        old_amount=old_bal, old_type=old_type,
+        new_amount=new_bal, new_type=new_type,
+        reason=reason,
+        changed_by=user.id,
+    )
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Bank opening balance helpers
+# ---------------------------------------------------------------------------
+
+def bank_has_transactions(bank):
+    return (CashTransactionDetails.objects.filter(banks=bank).exists()
+            or CashTransactionDetails.objects.filter(banks2=bank).exists())
+
+
+def apply_bank_opening(bank, treasure, sign):
+    """sign = +1 applies the bank's opening balance, -1 reverses it."""
+    amount = D(bank.bank_opening_balance_amt)
+    if amount <= 0:
+        return
+    delta = amount * sign
+
+    if bank.bank_opening_balance_type == CREDIT:
+        bank.credit_amt = D(bank.credit_amt) + delta
+        if treasure:
+            treasure.bank_amt = D(treasure.bank_amt) + delta
+    elif bank.bank_opening_balance_type == DEBIT:
+        bank.loan_amt = D(bank.loan_amt) + delta
+        if treasure:
+            treasure.loan_amt = D(treasure.loan_amt) + delta
+    else:
+        return
+
+    bank.save()
+    if treasure:
+        treasure.save()
+
+
+def sync_bank_report(bank, profile, user):
+    report = Report.objects.filter(banks=bank, management_profile=profile, managee=True).first()
+    amount = D(bank.bank_opening_balance_amt)
+
+    if amount <= 0 or bank.bank_opening_balance_type not in (CREDIT, DEBIT):
+        if report:
+            report.delete()
+        return
+
+    type_choice = "Addition" if bank.bank_opening_balance_type == CREDIT else "Reduction"
+    if report:
+        report.amount = amount
+        report.type_choice = type_choice
+        report.created_by = user.id
+        report.save()
+    else:
+        Report.objects.create(
+            type_choice=type_choice,
+            banks=bank,
+            management_profile=profile,
+            amount=amount,
+            created_by=user.id,
+            managee=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Family member tax flags
+# ---------------------------------------------------------------------------
+
+def update_member_tax_flags(profile):
+    tax_age = int(profile.tax_age or 0)
+    today = timezone.localdate()
+
+    for member in Member_Details.objects.filter(management_profile=profile):
+        if member.member_dob:
+            dob = member.member_dob
+            member.member_age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+        if member.member_age is not None and member.member_age >= 18:
+            member.adult = True
+
+        if (not member.death
+                and member.member_relation_ship in ('SON', 'FATHER')
+                and member.member_age is not None
+                and tax_age > 0):
+            member.member_tax_eligible = member.member_age >= tax_age
+
+        member.save()
+
+
+# ---------------------------------------------------------------------------
+# Management profile
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'POST'])
+def add_management(request):
+    user, error = authenticate(request)
+    if error:
+        return error
+
     if request.method == 'GET':
-        serializer = ManagementDetailsSerializer(customer)
-        return Response(serializer.data,status=status.HTTP_200_OK)
-    
-    elif request.method == 'PUT':
-        if get_role=="Admin" or rejin.is_superuser == True:
-            try:
-                print('super human')
-                print(request.data)
-                prod=request.data
-                
-                try:
-                    if prod['documents_status']=='false':
-                        d_status=False
-                    else:
-                        d_status=True
-                except Exception:
-                    pass
-                
-                try:
-                    if prod['images_status']=='false':
-                        i_status=False
-                    else:
-                        i_status=True
-                except Exception:
-                    pass   
-                
-                dict87={}
-                try:
-                    dict87['id']=prod['id']
-                except Exception:
-                    pass
-                dict87['temple_name']=prod['temple_name']
-                dict87['address']=prod['address']
-                dict87['comments']=prod['comments']
-                dict87['opening_balance']=prod['opening_balance']
-                dict87['tax_age']=prod['tax_age']
-                if prod['opening_balance_type']=='null':
-                    dict87['opening_balance_type']=None
-                else:
-                    dict87['opening_balance_type']=prod['opening_balance_type']
-                try:
-                    dict87['documents']=prod['documents']
-                except Exception:
-                    pass
-                try:
-                    dict87['images']=prod['images']
-                except Exception:
-                    pass
-                print('godd')
-                print(request.data['field_count'])
-                print(type(request.data['field_count']))
-                pc=int(request.data['field_count'])
-                print(pc)
-                print(type(pc))
-                produ_list=[]
-                if pc>=1:
-                    for num in range(1,pc+1):
-                        dict8={}
-                        try:
-                            if prod[f"management[{num}][id]"]=='null':
-                                pass
-                            else:
-                                p_id=prod[f"management[{num}][id]"]
-                                dict8['id']=p_id
-                        except Exception:
-                            pass
-                        
-                        dict8['bank_name']=prod[f"management[{num}][bank_name]"]
-                        dict8['account_no']=prod[f"management[{num}][account_no]"]
-                        dict8['ifsc']=prod[f"management[{num}][ifsc]"]
-                        dict8['account_holder_name']=prod[f"management[{num}][account_holder_name]"]
-                        dict8['branch_name']=prod[f"management[{num}][branch_name]"]
-                        
-                        dict8['bank_opening_balance_amt']=prod[f"management[{num}][bank_opening_balance_amt]"]
-                        if prod[f"management[{num}][bank_opening_balance_type]"]=='null':
-                            dict8['bank_opening_balance_type']=None
-                        else:
-                            dict8['bank_opening_balance_type']=prod[f"management[{num}][bank_opening_balance_type]"]
-                        
-                        produ_list.append(dict8)         
-                dict87['management']=produ_list
-                print('final')
-                print(dict87)
-            except Exception:
-                return Response({"Message":"Data requirement error"},status=status.HTTP_417_EXPECTATION_FAILED)
-                    
-            serializer876 = ManagementDetailsSerializer(customer,data=dict87)
-            if serializer876.is_valid():
-                bank=BankDetails.objects.filter(management=customer)
-                if bank:
-                    m_tr=ManagementTreasure.objects.filter(management_profile=customer).first()
-                    for bank_det in bank:
-                        bank_obj=BankDetails.objects.get(id=bank_det.id)  
-                        check_trans983=CashTransactionDetails.objects.filter(banks=bank_obj)
-                        check_trans984=CashTransactionDetails.objects.filter(banks2=bank_obj)
-                        if not check_trans983 and not check_trans984:
-                            if bank_obj.bank_opening_balance_type == "Credit":
-                                bank_obj.credit_amt=float(bank_obj.credit_amt) - float(bank_obj.bank_opening_balance_amt)
-                                bank_obj.save()
-                                if m_tr:
-                                    m_tr.bank_amt=float(m_tr.bank_amt)-float(bank_obj.bank_opening_balance_amt)
-                                    m_tr.save()
-                            elif bank_obj.bank_opening_balance_type == "Debit":
-                                bank_obj.loan_amt=float(bank_obj.loan_amt) - float(bank_obj.bank_opening_balance_amt)
-                                bank_obj.save()
-                                if m_tr:
-                                    m_tr.loan_amt=float(m_tr.loan_amt)-float(bank_obj.bank_opening_balance_amt)
-                                    m_tr.save()
+        profile = ManagementDetails.objects.first()
+        return Response(ManagementDetailsSerializer(profile).data, status=status.HTTP_200_OK)
 
-                # get_old_balance=customer.opening_balance
-                temp_family=serializer876.save()
-                temp_family.created_by=rejin.id
-                temp_family.save()
-                
-                get_new_balance=temp_family.opening_balance    
-                new_bal_type=temp_family.opening_balance_type
-                
-                if get_old_bal_type=='Credit' and get_new_balance<=0:
-                    temp_family.opening_balance_type=None
-                    temp_family.save()
-                    
-                if get_old_bal_type=='Debit' and get_new_balance<=0:
-                    temp_family.opening_balance_type=None
-                    temp_family.save()
-                
-                if get_old_bal_type == 'Credit' and get_old_balance > 0:
-                    chit_funds_with_management_amt = ChitFundsDetails.objects.filter(
-                        management_profile=customer, management_amt__gt=0
-                    )
-                    check_man_interest_given = PeopleInterestDetails.objects.filter(
-                        management_profile=customer,
-                        interest_type='Management Interest',
-                        principal_amt__gt=0,
-                    )
-                    if chit_funds_with_management_amt or check_man_interest_given:
-                        return Response(
-                            {
-                                "message": (
-                                    "Cannot change the opening balance while chit funds or "
-                                    "management interest records are linked to the current "
-                                    "Credit balance. Please clear or reassign those records "
-                                    "first."
-                                )
-                            },
-                            status=status.HTTP_409_CONFLICT,
-                        )
-                
-                    
-                check_opnbal_object_all = ManagementBalanceSheet.objects.filter(management_profile=customer)
-                
-                if check_opnbal_object_all:
-                    check_opnbal_object = ManagementBalanceSheet.objects.filter(
-                        management_profile=customer, managee=True
-                    ).order_by('id').first()
-                
-                    if check_opnbal_object:
-                        if get_old_bal_type == 'Credit' and get_new_balance <= 0:
-                            check_opnbal_object.delete()
-                        elif get_old_bal_type == 'Debit' and get_new_balance <= 0:
-                            check_opnbal_object.delete()
-                        else:
-                            if temp_family.opening_balance > 0 and temp_family.opening_balance_type is not None:
-                                check_opnbal_object.opening_balance_amt = temp_family.opening_balance
-                                check_opnbal_object.opening_balance_type = temp_family.opening_balance_type
-                                check_opnbal_object.save()
-                
-                                if check_opnbal_object.opening_balance_type == 'Credit':
-                                    repoo = Report.objects.filter(
-                                        management_profile=customer, mangebalancesheet=check_opnbal_object
-                                    ).first()
-                                    if repoo:
-                                        repoo.amount = check_opnbal_object.opening_balance_amt
-                                        repoo.type_choice = 'Addition'
-                                        repoo.created_by = rejin.id
-                                        repoo.save()
-                                    else:
-                                        Report.objects.create(
-                                            type_choice="Addition",
-                                            management_profile=temp_family,
-                                            amount=check_opnbal_object.opening_balance_amt,
-                                            created_by=rejin.id,
-                                            mangebalancesheet=check_opnbal_object,
-                                        )
-                                else:
-                                    repoo3 = Report.objects.filter(
-                                        management_profile=customer, mangebalancesheet=check_opnbal_object
-                                    ).first()
-                                    if repoo3:
-                                        repoo3.amount = check_opnbal_object.opening_balance_amt
-                                        repoo3.type_choice = 'Reduction'
-                                        repoo3.created_by = rejin.id
-                                        repoo3.save()
-                                    else:
-                                        Report.objects.create(
-                                            type_choice="Reduction",
-                                            management_profile=temp_family,
-                                            amount=check_opnbal_object.opening_balance_amt,
-                                            created_by=rejin.id,
-                                            mangebalancesheet=check_opnbal_object,
-                                        )
-                    else:
-                        if (
-                            temp_family.opening_balance is not None
-                            and temp_family.opening_balance > 0
-                            and temp_family.opening_balance_type is not None
-                        ):
-                            todayy = timezone.now()
-                            ki = ManagementBalanceSheet.objects.create(
-                                management_profile=temp_family,
-                                managee=True,
-                                opening_balance_amt=temp_family.opening_balance,
-                                date=todayy,
-                                opening_balance_type=temp_family.opening_balance_type,
-                            )
-                            if ki.opening_balance_type == 'Credit':
-                                Report.objects.create(
-                                    type_choice="Addition",
-                                    management_profile=temp_family,
-                                    amount=temp_family.opening_balance,
-                                    created_by=rejin.id,
-                                    mangebalancesheet=ki,
-                                )
-                            else:
-                                Report.objects.create(
-                                    type_choice="Reduction",
-                                    management_profile=temp_family,
-                                    amount=temp_family.opening_balance,
-                                    created_by=rejin.id,
-                                    mangebalancesheet=ki,
-                                )
-                
-                else:
-                    print('wakanda')
-                    if temp_family.opening_balance is not None and temp_family.opening_balance > 0:
-                        todayy = timezone.now()
-                        ki = ManagementBalanceSheet.objects.create(
-                            management_profile=temp_family,
-                            managee=True,
-                            opening_balance_amt=temp_family.opening_balance,
-                            date=todayy,
-                            opening_balance_type=temp_family.opening_balance_type,
-                        )
-                        if ki.opening_balance_type == 'Credit':
-                            Report.objects.create(
-                                type_choice="Addition",
-                                management_profile=temp_family,
-                                amount=temp_family.opening_balance,
-                                created_by=rejin.id,
-                                mangebalancesheet=ki,
-                            )
-                        else:
-                            Report.objects.create(
-                                type_choice="Reduction",
-                                management_profile=temp_family,
-                                amount=temp_family.opening_balance,
-                                created_by=rejin.id,
-                                mangebalancesheet=ki,
-                            )
-                                            
-                treasure=ManagementTreasure.objects.filter(management_profile=customer).first()  
-                if treasure:
-                    if get_old_bal_type=='Credit' and new_bal_type=='Credit':
-                        if get_new_balance>get_old_balance:
-                            calculated_bal=get_new_balance-get_old_balance
-                            treasure.cash_in_hand+=calculated_bal
-                            treasure.save()
-                        elif get_new_balance<get_old_balance:
-                            calculated_bal=get_old_balance-get_new_balance
-                            treasure.cash_in_hand = max(0, float(treasure.cash_in_hand) - float(calculated_bal))
-                            treasure.save()
-                            
-                    elif get_old_bal_type=='Debit' and new_bal_type=='Debit':
-                        if get_new_balance>get_old_balance:
-                            calculated_bal=get_new_balance-get_old_balance
-                            treasure.expence_amt+=calculated_bal
-                            treasure.save()
-                        elif get_new_balance<get_old_balance:
-                            calculated_bal=get_old_balance-get_new_balance
-                            treasure.expence_amt = max(0, float(treasure.expence_amt) - float(calculated_bal))
-                            treasure.save()
-                               
-                    elif get_old_bal_type=='Credit' and new_bal_type=='Debit':
-                        treasure.cash_in_hand = max(0, float(treasure.cash_in_hand) - float(get_old_balance))
-                        treasure.expence_amt+=get_new_balance
-                        treasure.save()
-                    elif get_old_bal_type=='Debit' and new_bal_type=='Credit':
-                        treasure.cash_in_hand+=get_new_balance
-                        treasure.expence_amt = max(0, float(treasure.expence_amt) - float(get_old_balance))
-                        treasure.save()
-                        
-                    elif get_old_bal_type=='Credit' and new_bal_type==None and get_new_balance<=0:
-                        treasure.cash_in_hand = max(0, float(treasure.cash_in_hand) - float(get_old_balance))
-                        treasure.save()
-                        
-                    elif get_old_bal_type=='Debit' and new_bal_type==None and get_new_balance<=0:
-                        treasure.expence_amt = max(0, float(treasure.expence_amt) - float(get_old_balance))
-                        treasure.save()
-                        
-                    elif new_bal_type=='Credit':
-                        treasure.cash_in_hand+=get_new_balance
-                        treasure.save()
-                    elif new_bal_type=='Debit':
-                        treasure.expence_amt+=get_new_balance
-                        treasure.save()
-                      
-                else:
-                    if temp_family.opening_balance_type!=None and temp_family.opening_balance!=None and temp_family.opening_balance_type=='Credit' and temp_family.opening_balance>0:    
-                        ManagementTreasure.objects.create(management_profile=temp_family,cash_in_hand=temp_family.opening_balance)
-                        check_mbal=ManagementBalanceSheet.objects.filter(management_profile=temp_family,managee=True).first()
-                        todayy5=timezone.now()
-                        if check_mbal:
-                            check_mbal.delete()
-                            kie45=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy5,opening_balance_type=temp_family.opening_balance_type)
-                            Report.objects.create(type_choice="Addition",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=kie45) 
-                        else:
-                            kie=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy5,opening_balance_type=temp_family.opening_balance_type)
-                            Report.objects.create(type_choice="Addition",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=kie) 
-                                    
-                    elif temp_family.opening_balance_type!=None and temp_family.opening_balance!=None and temp_family.opening_balance_type=='Debit' and temp_family.opening_balance>0:
-                        ManagementTreasure.objects.create(management_profile=temp_family,expence_amt=temp_family.opening_balance)
-                        check_mbal4=ManagementBalanceSheet.objects.filter(management_profile=temp_family,managee=True).first()
-                        todayy5=timezone.now()
-                        if check_mbal4:
-                            check_mbal4.delete()
-                            kie45g=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy5,opening_balance_type=temp_family.opening_balance_type)
-                            Report.objects.create(type_choice="Reduction",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=kie45g) 
-                        else:
-                            kie=ManagementBalanceSheet.objects.create(management_profile=temp_family,managee=True,opening_balance_amt=temp_family.opening_balance,date=todayy5,opening_balance_type=temp_family.opening_balance_type)
-                            Report.objects.create(type_choice="Reduction",management_profile=temp_family,amount=temp_family.opening_balance,created_by=rejin.id,mangebalancesheet=kie)      
-                    else:
-                        ManagementTreasure.objects.create(management_profile=temp_family)
-                    
-                try:
-                    if d_status==False:
-                        temp_family.documents=None
-                        temp_family.save()
-                except Exception:
-                    pass
-                try:
-                    if i_status==False:
-                        temp_family.images=None
-                        temp_family.save()
-                except Exception:
-                    pass
-                
-                # change tax eligible 
-                fam_mem=Member_Details.objects.filter(management_profile=customer)
-                for one_mem in fam_mem:
-                    if one_mem.member_dob:
-                        today = timezone.localdate()
-                        one_mem.member_age = today.year - one_mem.member_dob.year - ((today.month, today.day) < (one_mem.member_dob.month, one_mem.member_dob.day))
-                        one_mem.save()
-                    if one_mem.member_age!=None and one_mem.member_age>=18:
-                        one_mem.adult=True
-                        one_mem.save()
-                        
-                    if not one_mem.death and one_mem.member_relation_ship=='SON' or one_mem.member_relation_ship=='FATHER':
-                        get_tax_age=ManagementDetails.objects.all().first().tax_age
-                        if get_tax_age>0:
-                            gov_tax=get_tax_age
-                            
-                            if one_mem.member_age >= gov_tax:
-                                one_mem.member_tax_eligible = True
-                                one_mem.save()
-                            else:
-                                one_mem.member_tax_eligible = False
-                                one_mem.save()
-                
+    # POST
+    if not is_admin(user):
+        return unauthorized()
+    if ManagementDetails.objects.exists():
+        return Response({"message": "Management Profile details already added"},
+                        status=status.HTTP_406_NOT_ACCEPTABLE)
 
-                bank1=BankDetails.objects.filter(management=temp_family)
-                if bank1:
-                    treasure34=ManagementTreasure.objects.filter(management_profile=customer).first()  
-                    for bank_det1 in bank1:
-                        bank_obj1=BankDetails.objects.get(id=bank_det1.id)
+    try:
+        payload = parse_management_payload(request.data)
+    except (KeyError, TypeError, ValueError):
+        return Response({"Message": "Data requirement error"}, status=status.HTTP_417_EXPECTATION_FAILED)
 
-                        check_trans983=CashTransactionDetails.objects.filter(banks=bank_obj1)
-                        check_trans984=CashTransactionDetails.objects.filter(banks2=bank_obj1)
-                        if not check_trans983 and not check_trans984:
-                            if bank_obj1.bank_opening_balance_type == "Credit":
-                                bank_obj1.credit_amt=float(bank_obj1.credit_amt) + float(bank_obj1.bank_opening_balance_amt)
-                                bank_obj1.save()
-                                if treasure34:
-                                    treasure34.bank_amt=float(treasure34.bank_amt)+float(bank_obj1.bank_opening_balance_amt)
-                                    treasure34.save()
-                                    
-                                check_bank_rep=Report.objects.filter(banks=bank_obj1,management_profile=temp_family,managee=True).first()
-                                if check_bank_rep:
-                                    check_bank_rep.amount=bank_obj1.bank_opening_balance_amt
-                                    check_bank_rep.created_by=rejin.id
-                                    check_bank_rep.type_choice='Addition'
-                                    check_bank_rep.save()
-                                else:
-                                    Report.objects.create(type_choice="Addition",banks=bank_obj1,management_profile=temp_family,amount=bank_obj1.bank_opening_balance_amt,created_by=rejin.id,managee=True)
-                                    
-                                    
-                            elif bank_obj1.bank_opening_balance_type == "Debit":
-                                bank_obj1.loan_amt=float(bank_obj1.loan_amt) + float(bank_obj1.bank_opening_balance_amt)
-                                bank_obj1.save()
-                                if treasure34:
-                                    treasure34.loan_amt=float(treasure34.loan_amt)+float(bank_obj1.bank_opening_balance_amt)
-                                    treasure34.save()
-                                    
-                                check_bank_rep=Report.objects.filter(banks=bank_obj1,management_profile=temp_family,managee=True).first()
-                                if check_bank_rep:
-                                    check_bank_rep.amount=bank_obj1.bank_opening_balance_amt
-                                    check_bank_rep.created_by=rejin.id
-                                    check_bank_rep.type_choice='Reduction'
-                                    check_bank_rep.save()
-                                else:
-                                    Report.objects.create(type_choice="Reduction",banks=bank_obj1,management_profile=temp_family,amount=bank_obj1.bank_opening_balance_amt,created_by=rejin.id,managee=True)
-                                
-                return Response(serializer876.data,status=status.HTTP_201_CREATED)
-            else:
-                return Response(serializer876.errors,status=status.HTTP_400_BAD_REQUEST)
-        return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
-            
-    elif request.method == 'DELETE':
-        if get_role=="Admin" or rejin.is_superuser == True:
-            bank=BankDetails.objects.filter(management=customer)
-            if bank:
-                for bank_det in bank:
-                    bank_obj=BankDetails.objects.get(id=bank_det.id)
-                    if bank_obj.bank_opening_balance_type == "Credit":
-                        bank_obj.credit_amt=float(bank_obj.credit_amt) - float(bank_obj.bank_opening_balance_amt)
-                        bank_obj.save()
-                    elif bank_obj.bank_opening_balance_type == "Debit":
-                        bank_obj.loan_amt=float(bank_obj.loan_amt) - float(bank_obj.bank_opening_balance_amt)
-                        bank_obj.save()
-            customer.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
-    
+    try:
+        balance, bal_type = normalize_opening_balance(payload['opening_balance'],
+                                                      payload['opening_balance_type'])
+    except ValueError as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    payload['opening_balance'] = balance
+    payload['opening_balance_type'] = bal_type
+
+    serializer = ManagementDetailsSerializer(data=payload)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        profile = serializer.save()
+        profile.created_by = user.id
+        profile.save()
+
+        treasure = create_treasure(profile, balance, bal_type)
+        sync_opening_balance_sheet(profile, balance, bal_type, user)
+
+        for bank in BankDetails.objects.filter(management=profile):
+            apply_bank_opening(bank, treasure, +1)
+            sync_bank_report(bank, profile, user)
+
+        if balance > 0:
+            OpeningBalanceAdjustment.objects.create(
+                management_profile=profile,
+                old_amount=ZERO, old_type=None,
+                new_amount=balance, new_type=bal_type,
+                reason="Initial opening balance",
+                changed_by=user.id,
+            )
+
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+def edit_management(request, pk):
+    user, error = authenticate(request)
+    if error:
+        return error
+
+    if not ManagementDetails.objects.filter(pk=pk).exists():
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        profile = ManagementDetails.objects.get(pk=pk)
+        return Response(ManagementDetailsSerializer(profile).data, status=status.HTTP_200_OK)
+
+    if request.method == 'PATCH':
+        return Response({"message": "Use PUT to update the profile"},
+                        status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    if not is_admin(user):
+        return unauthorized()
+
+    if request.method == 'DELETE':
+        with transaction.atomic():
+            profile = ManagementDetails.objects.select_for_update().get(pk=pk)
+            for bank in BankDetails.objects.filter(management=profile):
+                apply_bank_opening(bank, None, -1)
+            profile.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # PUT: profile details, banks, and (if sent) the opening balance.
+    # The opening balance goes through change_opening_balance, the same safe
+    # path as the update_opening_balance endpoint.
+    try:
+        payload = parse_management_payload(request.data, with_ids=True)
+    except (KeyError, TypeError, ValueError):
+        return Response({"Message": "Data requirement error"}, status=status.HTTP_417_EXPECTATION_FAILED)
+
+    balance_sent = 'opening_balance' in request.data
+    if balance_sent:
+        try:
+            new_bal, new_type = normalize_opening_balance(request.data.get('opening_balance'),
+                                                          request.data.get('opening_balance_type'))
+        except ValueError as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        reason = (request.data.get('reason') or '').strip() or "Updated from profile edit"
+
+    documents_flag = read_flag(request.data, 'documents_status')
+    images_flag = read_flag(request.data, 'images_status')
+
+    try:
+        with transaction.atomic():
+            profile = ManagementDetails.objects.select_for_update().get(pk=pk)
+
+            # 1. Opening balance first (raises OpeningBalanceError -> whole PUT rolls back)
+            if balance_sent:
+                change_opening_balance(profile, user, new_bal, new_type, reason)
+
+            # 2. Serializer must not overwrite the balance just applied
+            payload['opening_balance'] = profile.opening_balance
+            payload['opening_balance_type'] = profile.opening_balance_type
+
+            serializer = ManagementDetailsSerializer(profile, data=payload)
+            if not serializer.is_valid():
+                transaction.set_rollback(True)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetched after step 1, so it has the updated cash / expense values
+            treasure = (ManagementTreasure.objects.select_for_update()
+                        .filter(management_profile=profile).first())
+            if treasure is None:
+                treasure = create_treasure(profile, D(profile.opening_balance), profile.opening_balance_type)
+
+            # 3. Reverse bank opening balances that are not yet used in transactions
+            for bank in BankDetails.objects.filter(management=profile):
+                if not bank_has_transactions(bank):
+                    apply_bank_opening(bank, treasure, -1)
+
+            profile = serializer.save()
+            if documents_flag is False:
+                profile.documents = ''   # '' is safe for null and non-null FileFields
+            if images_flag is False:
+                profile.images = ''
+            profile.save()
+
+            # 4. Re-apply bank opening balances with the new values
+            for bank in BankDetails.objects.filter(management=profile):
+                if not bank_has_transactions(bank):
+                    apply_bank_opening(bank, treasure, +1)
+                    sync_bank_report(bank, profile, user)
+
+            update_member_tax_flags(profile)
+    except OpeningBalanceError as e:
+        return Response({"message": e.message}, status=e.code)
+
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
+# Opening balance (separate, audited endpoint)
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'POST'])
+def update_opening_balance(request, pk):
+    user, error = authenticate(request)
+    if error:
+        return error
+
+    if request.method == 'GET':
+        history = (OpeningBalanceAdjustment.objects
+                   .filter(management_profile_id=pk)
+                   .order_by('-changed_at')
+                   .values('id', 'old_amount', 'old_type', 'new_amount', 'new_type',
+                           'reason', 'changed_by', 'changed_at'))
+        return Response(list(history), status=status.HTTP_200_OK)
+
+    if not is_admin(user):
+        return unauthorized()
+
+    try:
+        new_bal, new_type = normalize_opening_balance(request.data.get('opening_balance'),
+                                                      request.data.get('opening_balance_type'))
+    except ValueError as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    reason = (request.data.get('reason') or '').strip()
+    if not reason:
+        return Response({"message": "Reason is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        with transaction.atomic():
+            profile = ManagementDetails.objects.select_for_update().filter(pk=pk).first()
+            if not profile:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            changed = change_opening_balance(profile, user, new_bal, new_type, reason)
+    except OpeningBalanceError as e:
+        return Response({"message": e.message}, status=e.code)
+
+    if not changed:
+        return Response({"message": "No change"}, status=status.HTTP_200_OK)
+
+    return Response({"message": "Opening balance updated",
+                     "opening_balance": str(new_bal),
+                     "opening_balance_type": new_type},
+                    status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Banks
+# ---------------------------------------------------------------------------
+
 @api_view(['GET'])
 def view_bank_details(request):
-    rejin=token_checking(request)
-    if not rejin:
-        return Response({"message":"No User Found"},status=status.HTTP_401_UNAUTHORIZED)
-    if not rejin.is_active:
-        return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
-    check_management=ManagementDetails.objects.all()
-    if not check_management:
-        dict6={}
-        dict6['message']= "First Add Management Profile details"
-        return Response(dict6,status=status.HTTP_406_NOT_ACCEPTABLE)
-    else:
-        management=ManagementDetails.objects.all().first()
-    if request.method == 'GET':
-        all_banks = BankDetails.objects.filter(management=management)
-        serializer = BankDetailsSerializer(all_banks,many=True)
-        return Response(serializer.data,status=status.HTTP_200_OK)
-    
+    user, error = authenticate(request)
+    if error:
+        return error
+    management, error = get_management_or_error()
+    if error:
+        return error
+
+    banks = BankDetails.objects.filter(management=management)
+    return Response(BankDetailsSerializer(banks, many=True).data, status=status.HTTP_200_OK)
 
 
-@api_view(['POST','GET'])
+# ---------------------------------------------------------------------------
+# Instructions
+# ---------------------------------------------------------------------------
+
+@api_view(['POST', 'GET'])
 def add_instructions(request):
-        rejin=token_checking(request)
-        if not rejin:
-            return Response({"message":"No User Found"},status=status.HTTP_401_UNAUTHORIZED)
-        if not rejin.is_active:
-            return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
-        check_management=ManagementDetails.objects.all()
-        if not check_management:
-            dict6={}
-            dict6['message']= "First Add Management Profile details"
-            return Response(dict6,status=status.HTTP_406_NOT_ACCEPTABLE)
-        else:
-            management=ManagementDetails.objects.all().first()     
-        if rejin.user_role:                                                                                                                                                                                                                                                                                                                                                                                                                      
-                get_role=rejin.user_role  
-        if request.method=="POST": 
-            if rejin.is_superuser == True or get_role =="Admin":
-                if len(Instructions.objects.filter(management=management)) == 0:
-                        serializer=InstructionSerializer(data=request.data) 
-                        if serializer.is_valid():
-                            instruct=serializer.save()
-                            instruct.management=management
-                            instruct.save()
-                            return Response(serializer.data,status=status.HTTP_201_CREATED)
-                        else:
-                            return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
-                else:
-                        return Response({'message':'Instructions Already added'},status=status.HTTP_302_FOUND)              
-            return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
-        elif request.method=="GET":
-            if len(Instructions.objects.filter(management=management)) == 0:
-                    instructions=[]            
-                    return Response(instructions,status=status.HTTP_202_ACCEPTED)
-            else:         
-                add_plan=Instructions.objects.filter(management=management).first()
-                serializer=InstructionSerializer(add_plan)
-                return Response(serializer.data,status=status.HTTP_200_OK)
-          
+    user, error = authenticate(request)
+    if error:
+        return error
+    management, error = get_management_or_error()
+    if error:
+        return error
+
+    existing = Instructions.objects.filter(management=management).first()
+
+    if request.method == 'GET':
+        if not existing:
+            return Response([], status=status.HTTP_202_ACCEPTED)
+        return Response(InstructionSerializer(existing).data, status=status.HTTP_200_OK)
+
+    # POST
+    if not is_admin(user):
+        return unauthorized()
+    if existing:
+        return Response({'message': 'Instructions Already added'}, status=status.HTTP_302_FOUND)
+
+    serializer = InstructionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    serializer.save(management=management)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@api_view(['PUT', 'GET', 'DELETE'])
+def edit_instructions(request, pk):
+    user, error = authenticate(request)
+    if error:
+        return error
+    management, error = get_management_or_error()
+    if error:
+        return error
 
-@api_view(['PUT','GET','DELETE'])
-def edit_instructions(request,pk):
-        rejin=token_checking(request)
-        if not rejin:
-            return Response({"message":"No User Found"},status=status.HTTP_401_UNAUTHORIZED)
-        if not rejin.is_active:
-            return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
-        check_management=ManagementDetails.objects.all()
-        if not check_management:
-            dict6={}
-            dict6['message']= "First Add Management Profile details"
-            return Response(dict6,status=status.HTTP_406_NOT_ACCEPTABLE)
-        else:
-            management=ManagementDetails.objects.all().first()  
-        if rejin.user_role:                                                                                                                                                                                                                                                                                                                                                                                                                      
-            get_role=rejin.user_role           
-        try:
-            add_plan = Instructions.objects.get(id=pk,management=management)            
-        except Instructions.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        if request.method=="GET":                              
-            serializer=InstructionSerializer(add_plan)
-            return Response(serializer.data,status=status.HTTP_200_OK)
-                    
-        
-        elif request.method=="PUT":            
-            if rejin.is_superuser == True or get_role =="Admin" :   
-                serializer = InstructionSerializer(add_plan, data=request.data)    
-                if serializer.is_valid():                    
-                        instruct=serializer.save()   
-                        instruct.management=management
-                        instruct.save()                                                    
+    instruction = Instructions.objects.filter(id=pk, management=management).first()
+    if not instruction:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
-                        return Response(serializer.data,status=status.HTTP_201_CREATED)
-                else:
-                        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
-            return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
-        
-        elif request.method == 'DELETE':
-            if rejin.is_superuser == True or get_role =="Admin":        
-                add_plan.delete()
-                return Response({'message':"Deleted Successfully"},status=status.HTTP_204_NO_CONTENT)
-            return Response({'message':"un-authenticate"},status.HTTP_401_UNAUTHORIZED)
+    if request.method == 'GET':
+        return Response(InstructionSerializer(instruction).data, status=status.HTTP_200_OK)
+
+    if not is_admin(user):
+        return unauthorized()
+
+    if request.method == 'PUT':
+        serializer = InstructionSerializer(instruction, data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save(management=management)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # DELETE
+    instruction.delete()
+    return Response({'message': "Deleted Successfully"}, status=status.HTTP_204_NO_CONTENT)

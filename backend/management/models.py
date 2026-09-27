@@ -1,4 +1,6 @@
 from django.db import models
+from django.db import models
+from django.utils import timezone
 
 OPENING_CHOICES = (
     ('Credit','Credit'),
@@ -48,3 +50,29 @@ class Instructions(models.Model):
     instruction=models.TextField(null=True,blank=True)
     created_at=models.DateTimeField(auto_now_add=True,blank=True,null=True)
     updated_at = models.DateTimeField(auto_now=True,null=True,blank=True)
+
+# Add this to the SAME app's models.py (below ManagementDetails),
+# then run:  python manage.py makemigrations && python manage.py migrate
+
+
+
+
+class OpeningBalanceAdjustment(models.Model):
+    management_profile = models.ForeignKey(
+        'ManagementDetails',
+        on_delete=models.CASCADE,
+        related_name='opening_balance_adjustments',
+    )
+    old_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    old_type = models.CharField(max_length=10, null=True, blank=True)
+    new_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    new_type = models.CharField(max_length=10, null=True, blank=True)
+    reason = models.TextField()
+    changed_by = models.IntegerField(null=True, blank=True)
+    changed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"{self.old_amount} {self.old_type} -> {self.new_amount} {self.new_type}"

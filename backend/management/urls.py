@@ -7,5 +7,6 @@ urlpatterns = [
     path('view_bank_details/', views.view_bank_details,name='view_bank_details'),
     path('add_instructions/',views.add_instructions,name="add_instructions"),
     path('edit_instructions/<int:pk>/',views.edit_instructions,name='edit_instructions'),
+    path('management/<int:pk>/opening-balance/', views.update_opening_balance),
     
 ]
