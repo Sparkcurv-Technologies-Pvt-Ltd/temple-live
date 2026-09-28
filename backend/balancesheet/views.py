@@ -484,24 +484,22 @@ def build_temple_balancesheet(management, range_type, start, end):
     credit = {}
     debit = {}
 
-    # ---- Opening balance, shown in two clear lines:
-    #   opening_balance  = the Management profile opening balance, on its own side
-    #                      (Credit -> Credit side, Debit -> Debit side)
-    #   previous_balance = net of all transactions before the start date
-    #                      (surplus -> Credit side, shortfall -> Debit side)
+    # ---- Opening balance: ONE line.
+    #   Management opening balance (Credit adds, Debit subtracts)
+    #   + all income before the selected date
+    #   - all expenses before the selected date
+    #   Result > 0 -> Opening Balance on the Credit side
+    #   Result < 0 -> Opening Balance on the Debit side
     total_opening, bank_opening, cash_opening = opening_figures(management, before)
-    profile_opening = management_opening_signed(management)
-    previous_balance = total_opening - profile_opening
 
     opening_credit = 0
     opening_debit = 0
-    for key, value in (('opening_balance', profile_opening), ('previous_balance', previous_balance)):
-        if value > 0:
-            credit[key] = value
-            opening_credit += value
-        elif value < 0:
-            debit[key] = abs(value)
-            opening_debit += abs(value)
+    if total_opening > 0:
+        credit['opening_balance'] = total_opening
+        opening_credit = total_opening
+    elif total_opening < 0:
+        debit['opening_balance'] = abs(total_opening)
+        opening_debit = abs(total_opening)
 
     # ---- Sections
     sections = [
@@ -723,8 +721,11 @@ def build_chitfund_balancesheet(management, range_type, start, end):
         }
 
     result = {'Credit': credit, 'Debit': debit}
-    result['total_credit_amount'] = invest_total + collection_total + opening_in - opening_out + income_total
-    result['total_debit_amount'] = given_total + distribution_total + expense_total
+    opening_net = opening_in - opening_out
+    result['total_credit_amount'] = (invest_total + collection_total + income_total
+                                     + (opening_net if opening_net > 0 else 0))
+    result['total_debit_amount'] = (given_total + distribution_total + expense_total
+                                    + (abs(opening_net) if opening_net < 0 else 0))
     result['name'] = range_type
     result['start_date'] = start
     if range_type == "custom_date_range":
