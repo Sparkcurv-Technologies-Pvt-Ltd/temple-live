@@ -7,17 +7,39 @@ The operator shares a link like:
 When the customer taps the link on their phone, the browser opens/downloads
 the PDF directly — no admin portal, no login, no HTML render, no JS.
 
-Uses reportlab (already installed in the pod) for zero-dependency PDF
-generation. Layout:
+Uses reportlab for zero-dependency PDF generation. Layout:
     1. Temple / statement header
     2. Payment Receipt block  (from ?receipt_* query params)
     3. Borrower / Member details + statement period
     4. Totals + Pending / Outstanding summary
     5. 1-year Balance Sheet table
+
+Tamil / Unicode support
+-----------------------
+reportlab's built-in Helvetica only covers Latin glyphs, so Tamil text (festival
+names, member names, etc.) used to render as black boxes. We now register a
+Tamil-capable TrueType font (Noto Sans Tamil) and render any user-supplied text
+through `_mixed()`, which keeps Latin runs in Helvetica and switches Tamil runs
+(U+0B80–U+0BFF) to the Tamil font. Text cells are Paragraphs, so long names
+wrap inside their column instead of bleeding into the next one.
+
+Font files (static TTFs, NOT the variable font) are looked up in:
+    <this dir>/fonts/NotoSansTamil-Regular.ttf
+    <this dir>/fonts/NotoSansTamil-Bold.ttf
+    /usr/share/fonts/truetype/noto/...      (Debian/Ubuntu: apt install fonts-noto-core)
+    /usr/share/fonts/noto/...
+Override with the env var PDF_TAMIL_FONT_DIR.
+
+Note: reportlab does no OpenType shaping, so a few Tamil words (vowel signs
+that sit before the consonant, conjuncts) may look slightly misordered. If that
+is unacceptable, render the PDF from HTML with WeasyPrint instead.
 """
 
+import os
+import re
 from datetime import timedelta
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from django.http import FileResponse, HttpResponseNotFound, HttpResponse
 from django.utils import timezone
@@ -26,15 +48,17 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
 # Lazy reportlab import — some deployments (older EC2 images) may not yet
-# have reportlab installed. Loading it inside the view functions instead of
-# at module import time means the Django backend can still boot cleanly;
-# the two PDF endpoints will surface a 501 with an install hint until the
-# operator runs `pip install reportlab`.
+# have reportlab installed. Loading it inside a try/except instead of
+# failing at module import time means the Django backend can still boot
+# cleanly; the two PDF endpoints will surface a 501 with an install hint
+# until the operator runs `pip install reportlab`.
 try:
     from reportlab.lib import colors  # noqa: F401
     from reportlab.lib.pagesizes import A4  # noqa: F401
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # noqa: F401
     from reportlab.lib.units import mm  # noqa: F401
+    from reportlab.pdfbase import pdfmetrics  # noqa: F401
+    from reportlab.pdfbase.ttfonts import TTFont  # noqa: F401
     from reportlab.platypus import (  # noqa: F401
         SimpleDocTemplate,
         Paragraph,
@@ -77,9 +101,97 @@ from collection.public_views import (
 )
 
 
-TEMPLE_GREEN = colors.HexColor("#0F5132")
-BORDER_GREY = colors.HexColor("#e2e8f0")
-MUTED_GREY = colors.HexColor("#64748b")
+# ---------------------------------------------------------------------------
+# Colours
+# ---------------------------------------------------------------------------
+if _REPORTLAB_AVAILABLE:
+    TEMPLE_GREEN = colors.HexColor("#0F5132")
+    BORDER_GREY = colors.HexColor("#e2e8f0")
+    MUTED_GREY = colors.HexColor("#64748b")
+
+
+# ---------------------------------------------------------------------------
+# Tamil font registration
+# ---------------------------------------------------------------------------
+_TAMIL_REGULAR = "NotoSansTamil"
+_TAMIL_BOLD = "NotoSansTamil-Bold"
+_TAMIL_FONT_READY = False
+_TAMIL_RUN = re.compile(r"([\u0B80-\u0BFF]+)")
+
+
+def _font_search_dirs():
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+    dirs = []
+    env_dir = os.environ.get("PDF_TAMIL_FONT_DIR")
+    if env_dir:
+        dirs.append(env_dir)
+    dirs += [
+        here,
+        "/usr/share/fonts/truetype/noto",
+        "/usr/share/fonts/noto",
+        "/usr/share/fonts/truetype/NotoSansTamil",
+    ]
+    return dirs
+
+
+def _find_font(filename):
+    for d in _font_search_dirs():
+        p = os.path.join(d, filename)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _register_tamil_font():
+    """Register Noto Sans Tamil once. Safe to call repeatedly."""
+    global _TAMIL_FONT_READY
+    if _TAMIL_FONT_READY or not _REPORTLAB_AVAILABLE:
+        return _TAMIL_FONT_READY
+    regular = _find_font("NotoSansTamil-Regular.ttf")
+    bold = _find_font("NotoSansTamil-Bold.ttf")
+    if not regular:
+        return False
+    try:
+        pdfmetrics.registerFont(TTFont(_TAMIL_REGULAR, regular))
+        # If no bold file is present, reuse the regular face for bold text.
+        pdfmetrics.registerFont(TTFont(_TAMIL_BOLD, bold or regular))
+        _TAMIL_FONT_READY = True
+    except Exception:
+        _TAMIL_FONT_READY = False
+    return _TAMIL_FONT_READY
+
+
+if _REPORTLAB_AVAILABLE:
+    _register_tamil_font()
+
+
+def _mixed(text, size=9, bold=False, color=None, align=0):
+    """
+    Return a Paragraph where Latin text stays in Helvetica and Tamil runs
+    switch to Noto Sans Tamil. Wraps inside its table cell.
+    """
+    raw = str(text if text not in (None, "") else "-")
+    latin_font = "Helvetica-Bold" if bold else "Helvetica"
+    tamil_font = _TAMIL_BOLD if bold else _TAMIL_REGULAR
+
+    if _TAMIL_FONT_READY:
+        parts = _TAMIL_RUN.split(escape(raw))
+        markup = "".join(
+            f'<font name="{tamil_font}">{p}</font>' if _TAMIL_RUN.fullmatch(p) else p
+            for p in parts if p
+        )
+    else:
+        markup = escape(raw)
+
+    style = ParagraphStyle(
+        "cell",
+        fontName=latin_font,
+        fontSize=size,
+        leading=size + 3,
+        alignment=align,
+        textColor=color or colors.black,
+    )
+    return Paragraph(markup, style)
 
 
 def _rupee(n) -> str:
@@ -139,30 +251,18 @@ def _styled_doc(title):
     return doc, buf, styles
 
 
-def _receipt_flowables(styles, r):
-    """Render the Payment Receipt card as reportlab flowables."""
-    if not _has_receipt(r):
-        return []
-    data = [["Payment Receipt", ""]]
-    if r["no"]:
-        data.append(["Receipt No", r["no"]])
-    if r["date"]:
-        data.append(["Date", r["date"]])
-    if r["purpose"]:
-        data.append(["Purpose", r["purpose"]])
-    if r["amt"]:
-        data.append(["Amount Paid", _rupee(r["amt"])])
-    t = Table(data, colWidths=[55 * mm, None])
-    t.setStyle(TableStyle([
+def _info_card_style(header_size=12):
+    """Shared style for the two-column 'label | value' cards."""
+    return TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), TEMPLE_GREEN),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 12),
+        ("FONTSIZE", (0, 0), (-1, 0), header_size),
         ("SPAN", (0, 0), (-1, 0)),
         ("ALIGN", (0, 0), (-1, 0), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
         ("FONTNAME", (0, 1), (0, -1), "Helvetica"),
-        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
         ("FONTSIZE", (0, 1), (-1, -1), 10),
         ("BOX", (0, 0), (-1, -1), 0.5, BORDER_GREY),
         ("INNERGRID", (0, 1), (-1, -1), 0.25, BORDER_GREY),
@@ -170,7 +270,24 @@ def _receipt_flowables(styles, r):
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    ])
+
+
+def _receipt_flowables(styles, r):
+    """Render the Payment Receipt card as reportlab flowables."""
+    if not _has_receipt(r):
+        return []
+    data = [["Payment Receipt", ""]]
+    if r["no"]:
+        data.append(["Receipt No", _mixed(r["no"], 10, bold=True)])
+    if r["date"]:
+        data.append(["Date", _mixed(r["date"], 10, bold=True)])
+    if r["purpose"]:
+        data.append(["Purpose", _mixed(r["purpose"], 10, bold=True)])
+    if r["amt"]:
+        data.append(["Amount Paid", _mixed(_rupee(r["amt"]), 10, bold=True)])
+    t = Table(data, colWidths=[55 * mm, None])
+    t.setStyle(_info_card_style())
     return [t, Spacer(1, 8 * mm)]
 
 
@@ -179,6 +296,7 @@ def _table_style_header():
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BOX", (0, 0), (-1, -1), 0.5, BORDER_GREY),
         ("INNERGRID", (0, 0), (-1, -1), 0.25, BORDER_GREY),
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
@@ -268,6 +386,8 @@ def public_member_statement_pdf(request, token: str):
         particulars = r.type_choice or "-"
         # "Name" — human-readable sub-identifier for the bill (matches
         # frontend `name_type` field, e.g. "Jun-2026" or "Ganesh Chaturthi").
+        # Festival / death-tariff names may be Tamil; they are rendered via
+        # _mixed() below so they no longer appear as black boxes.
         name = None
         if r.death_tariff_id and r.death_tariff:
             name = r.death_tariff.member_name
@@ -347,11 +467,11 @@ def public_member_statement_pdf(request, token: str):
     header_line = "Temple Statement"
     if category_label:
         header_line = f"{category_label} Statement"
-    story.append(Paragraph(header_line, styles["TitleG"]))
+    story.append(Paragraph(escape(header_line), styles["TitleG"]))
     period_line = f"1-Year Balance Sheet · {since.strftime('%d-%b-%Y')} to {timezone.now().date().strftime('%d-%b-%Y')}"
     if category_label:
         period_line = f"{category_label} · {period_line}"
-    story.append(Paragraph(period_line, styles["Muted"]))
+    story.append(Paragraph(escape(period_line), styles["Muted"]))
     story.append(Spacer(1, 6 * mm))
 
     story.extend(_receipt_flowables(styles, _receipt_from_query(request)))
@@ -377,31 +497,15 @@ def public_member_statement_pdf(request, token: str):
         story.append(pb_tbl)
         story.append(Spacer(1, 6 * mm))
 
-    # Member card
+    # Member card — name may be Tamil, so values go through _mixed()
     m_data = [
         ["Member details", ""],
-        ["Name", full_name or "-"],
-        ["Member No", member.member_no or "-"],
-        ["Mobile", getattr(member, "member_mobile_number", "") or "-"],
+        ["Name", _mixed(full_name or "-", 10, bold=True)],
+        ["Member No", _mixed(member.member_no or "-", 10, bold=True)],
+        ["Mobile", _mixed(getattr(member, "member_mobile_number", "") or "-", 10, bold=True)],
     ]
     m_tbl = Table(m_data, colWidths=[55 * mm, None])
-    m_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), TEMPLE_GREEN),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 12),
-        ("SPAN", (0, 0), (-1, 0)),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica"),
-        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 10),
-        ("BOX", (0, 0), (-1, -1), 0.5, BORDER_GREY),
-        ("INNERGRID", (0, 1), (-1, -1), 0.25, BORDER_GREY),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    m_tbl.setStyle(_info_card_style())
     story.append(m_tbl)
     story.append(Spacer(1, 6 * mm))
 
@@ -455,8 +559,8 @@ def public_member_statement_pdf(request, token: str):
             data.append([
                 "0",
                 since.strftime("%Y-%m-%d"),
-                "Opening Balance",
-                "brought forward",
+                _mixed("Opening Balance"),
+                _mixed("brought forward"),
                 f"{0.0:,.2f}",
                 f"{0.0:,.2f}",
                 f"{0.0:,.2f}",
@@ -466,8 +570,10 @@ def public_member_statement_pdf(request, token: str):
             data.append([
                 str(r["sl"]),
                 str(r["date"]),
-                str(r["particulars"])[:22],
-                str(r["name"])[:20],
+                # Paragraph cells wrap, so no character slicing is needed
+                # (the old [:22] / [:20] cuts also mis-measured Tamil glyphs).
+                _mixed(r["particulars"]),
+                _mixed(r["name"]),
                 f"{r['pre_balance']:,.2f}",
                 f"{r['credit']:,.2f}",
                 f"{r['debit']:,.2f}",
@@ -478,7 +584,7 @@ def public_member_statement_pdf(request, token: str):
         # (Family Details → Member List → single member) — sourced from the
         # latest TempleMemberReport row's balance_amt.
         data.append([
-            "", "", "", "Total",
+            "", "", "", _mixed("Total", bold=True),
             "",
             f"{total_credit:,.2f}",
             f"{total_debit:,.2f}",
@@ -527,16 +633,11 @@ def public_interest_statement_pdf(request, token: str):
     bal = PeopleInterestBalanceSheet.objects.filter(interest=interest).first()
 
     # ------------------------------------------------------------------
-    # FIX: "1-Year Balance Sheet" now pulls its exact structure and data
-    # straight from InterestPeopleReport — the same authoritative ledger
-    # table used everywhere else in the app (e.g. interest_profile).
-    # Previously this table was reconstructed from CollectionDetails
-    # (individual payments only), which meant interest accruals, penalty
-    # charges, and discounts recorded directly on the ledger (not tied to
-    # a payment row) never appeared here — and the running total shown
-    # didn't match the actual balance_amt column on each ledger entry.
+    # "1-Year Balance Sheet" pulls its exact structure and data straight
+    # from InterestPeopleReport — the same authoritative ledger table used
+    # everywhere else in the app (e.g. interest_profile).
     #
-    # Columns now mirror InterestPeopleReport's own fields directly:
+    # Columns mirror InterestPeopleReport's own fields directly:
     #   reportdate -> Date
     #   type_choice -> Type   (Initial / Interest / Penalty /
     #                           Principal Payment / Interest Payment /
@@ -596,52 +697,34 @@ def public_interest_statement_pdf(request, token: str):
     story = []
     story.append(Paragraph("Loan Statement", styles["TitleG"]))
     story.append(Paragraph(
-        f"{interest.interest_type or 'Interest'} · {since.strftime('%d-%b-%Y')} to {timezone.now().date().strftime('%d-%b-%Y')}",
+        escape(f"{interest.interest_type or 'Interest'} · {since.strftime('%d-%b-%Y')} to {timezone.now().date().strftime('%d-%b-%Y')}"),
         styles["Muted"],
     ))
     story.append(Spacer(1, 6 * mm))
 
     story.extend(_receipt_flowables(styles, _receipt_from_query(request)))
 
-    # Borrower details
+    # Borrower details — names are frequently Tamil, so use _mixed()
     b_data = [
         ["Borrower details", ""],
-        ["Name", interest.people_name or "-"],
-        ["Mobile", interest.people_mobile or "-"],
-        ["Interest type", interest.interest_type or "-"],
+        ["Name", _mixed(interest.people_name or "-", 10, bold=True)],
+        ["Mobile", _mixed(interest.people_mobile or "-", 10, bold=True)],
+        ["Interest type", _mixed(interest.interest_type or "-", 10, bold=True)],
     ]
     if interest.chit_name:
-        b_data.append(["Chit / Management fund", interest.chit_name])
+        b_data.append(["Chit / Management fund", _mixed(interest.chit_name, 10, bold=True)])
     b_tbl = Table(b_data, colWidths=[55 * mm, None])
-    b_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), TEMPLE_GREEN),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("SPAN", (0, 0), (-1, 0)),
-        ("FONTSIZE", (0, 0), (-1, 0), 12),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica"),
-        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 10),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-        ("BOX", (0, 0), (-1, -1), 0.5, BORDER_GREY),
-        ("INNERGRID", (0, 1), (-1, -1), 0.25, BORDER_GREY),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+    b_tbl.setStyle(_info_card_style())
     story.append(b_tbl)
     story.append(Spacer(1, 6 * mm))
 
-    # FIX: removed the "Outstanding balance" card (Total Issued,
-    # Principal paid, Principal balance, Penalty balance, Total
-    # outstanding) per request. `bal` is still fetched above since
-    # `closing_balance` falls back to `bal.balance_amt` when there are
-    # no ledger rows in the 1-year window — only the rendered card is
-    # gone.
+    # The "Outstanding balance" card (Total Issued, Principal paid,
+    # Principal balance, Penalty balance, Total outstanding) was removed per
+    # request. `bal` is still fetched above since `closing_balance` falls
+    # back to `bal.balance_amt` when there are no ledger rows in the
+    # 1-year window — only the rendered card is gone.
 
-    # 1-year balance sheet — now the exact structure/data from
-    # InterestPeopleReport (see FIX comment above).
+    # 1-year balance sheet — exact structure/data from InterestPeopleReport.
     story.append(Paragraph("1-Year Balance Sheet", styles["H2"]))
     if not ledger_rows and abs(opening_balance) <= 0.005:
         story.append(Paragraph("No entries in the last 12 months.", styles["Muted"]))
@@ -654,7 +737,7 @@ def public_interest_statement_pdf(request, token: str):
         if abs(opening_balance) > 0.005:
             data.append([
                 since.strftime("%Y-%m-%d"),
-                "Opening Balance",
+                _mixed("Opening Balance"),
                 f"{0.0:,.2f}",
                 f"{0.0:,.2f}",
                 f"{opening_balance:,.2f}",
@@ -662,13 +745,13 @@ def public_interest_statement_pdf(request, token: str):
         for r in ledger_rows:
             data.append([
                 r["date"],
-                str(r["type"])[:28],
+                _mixed(r["type"]),
                 f"{r['credit']:,.2f}",
                 f"{r['debit']:,.2f}",
                 f"{r['balance']:,.2f}",
             ])
         data.append([
-            "", "Total",
+            "", _mixed("Total", bold=True),
             f"{tot_credit:,.2f}",
             f"{tot_debit:,.2f}",
             f"{closing_balance:,.2f}",
