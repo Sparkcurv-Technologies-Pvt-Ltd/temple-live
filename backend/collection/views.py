@@ -4544,14 +4544,34 @@ def chitname_withfiltering_category(request):
                         fund_mem_list.append(fund)
                     elif interest_field and (mem_obj.intrest_balance_amt > 0
                                              or mem_obj.penalty_balance_amt > 0):
-                        next_due_date = mem_obj.interest_apply_date + relativedelta(months=1)
-                        if next_due_date <= checking_date or mem_obj.penalty_balance_amt > 0:
+                        # Owner rule (Oct 2026): interest_apply_date is set to
+                        # the 5th of the month by the periodic accrual engine
+                        # (_apply_for_record in interest/overdue_views.py,
+                        # run daily via the apply_periodic_interest_penalty
+                        # cron job). The collection window WITHOUT penalty
+                        # is day 5 through day 20 of that same month — this
+                        # borrower must appear in "Choose Person" during that
+                        # window even though next month's interest isn't due
+                        # yet. After the 20th, if still unpaid, the cron job
+                        # applies a penalty (penalty_balance_amt > 0), and the
+                        # borrower keeps showing regardless of date until
+                        # paid.
+                        window_start = mem_obj.interest_apply_date
+                        window_end = mem_obj.interest_apply_date.replace(day=20)
+                        in_window = window_start <= checking_date <= window_end
+                        if in_window or mem_obj.penalty_balance_amt > 0:
                             fund_mem_list.append(fund)
 
                 elif interest_category == "Interest":
                     if not has_balance_sheet:
                         continue
 
+                    # NOTE: this branch still uses the original single-cutoff
+                    # rule (next_due_date <= checking_date, no lower bound).
+                    # It has NOT been updated to the 5th-20th window — confirm
+                    # with the business whether plain "Interest" (Chit fund
+                    # Interest) should follow the same 5-20 window as
+                    # "Interest with capital" above before touching this.
                     next_due_date = mem_obj.interest_apply_date + relativedelta(months=1)
                     due_this_month = next_due_date <= checking_date
 
@@ -4665,7 +4685,6 @@ def chitname_withfiltering_category(request):
 
     # Unknown category
     return Response([], status=status.HTTP_200_OK)
-
 @api_view(['GET', 'POST'])
 def interest_balance_collection(request):
     rejin = token_checking(request)
