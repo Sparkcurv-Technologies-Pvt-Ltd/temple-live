@@ -73,34 +73,50 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
     # Owner rule (Oct 2026, corrected): for EVERY category, interest for
     # the month becomes due on the 5th — this is what makes the borrower
     # show up as "due" in the Collection screen starting the 5th, giving
-    # them a grace window to pay between the 5th and the 20th.
+    # them a grace window to pay between the 5th and the 20th. On the
+    # 20th, if that running balance (`intrest_balance_amt`) is STILL
+    # UNPAID: penalty is charged (unchanged logic, all categories), and
+    # for "Interest with capital" loans only, that month's charge is
+    # also folded into `principal_balance` so next month compounds on
+    # the larger base. Paying before the 20th skips the fold for that
+    # month entirely.
     #
-    # On the 20th, if that running balance (`intrest_balance_amt`) is
-    # STILL UNPAID:
-    #   - penalty is charged (unchanged logic, all categories), AND
-    #   - for "Interest with capital" loans only, that month's interest
-    #     charge (the `inc` computed on the 5th) is folded into
-    #     `principal_balance`, so next month's interest compounds on the
-    #     larger base.
-    # If the borrower pays before the 20th, none of that month's charge
-    # gets folded — only genuinely unpaid months compound.
+    # Design note: this is split into two independent phases rather than
+    # one combined walk.
+    #
+    # Phase 1 (charging) ALWAYS advances `bal.interest_apply_date` to the
+    # 5th of the month it just charged, regardless of whether that
+    # month's 20th has arrived yet. This matters because
+    # `chitname_withfiltering_category` (the "Choose Person" dropdown
+    # query, in collection/views.py) reads `interest_apply_date` as the
+    # anchor of the current due window (`window_start = interest_apply_
+    # date`, `window_end = interest_apply_date.replace(day=20)`) — if we
+    # only advanced it once day 20 had been fully processed (as an
+    # earlier version of this function did), a borrower charged on the
+    # 5th would not show up as due until we'd also reached the 20th,
+    # which defeats the whole point of the 5th-to-20th grace window.
+    #
+    # Phase 2 (penalty + fold) does NOT rely on any position pointer —
+    # it re-scans this record's own "Interest" report rows and, for each
+    # one whose day-20 has passed, applies penalty/fold if not already
+    # done (checked via dedicated idempotent audit rows). This guarantees
+    # a month's day-20 processing is never silently skipped even if this
+    # function is first called mid-window (between the 5th and 19th) and
+    # only called again well into a later month.
     is_capital = (record.interest_category or "").lower() == "interest with capital"
 
+    # ---- Phase 1: charge interest due on the 5th of each pending month --
     while True:
         charge_day = datetime.date(y, m, 5)
-        penalty_day = datetime.date(y, m, 20)
-
-        # Nothing to do until we've reached this month's due date (the 5th).
         if charge_day > today:
             break
 
-        # ---- 1) Interest for that month, due on the 5th -----------------
         existing_charge = InterestPeopleReport.objects.filter(
             interest=record,
             reportdate=charge_day,
             type_choice="Interest",
-        ).first()
-        if existing_charge is None:
+        ).exists()
+        if not existing_charge:
             if (record.interest_type_new or "").lower() == "amount":
                 inc = float(record.fix_interest_rate_percent or 0)
             else:  # percentage (default)
@@ -121,93 +137,90 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
                     created_by=record.created_by,
                 )
                 applied.append({"month": charge_day.isoformat(), "interest": inc})
-            inc_this_month = inc
-        else:
-            inc_this_month = float(existing_charge.credit_amt or 0)
 
-        # Don't advance past this month until the 20th has actually been
-        # reached — otherwise a call made between the 5th and the 19th
-        # would silently skip this month's penalty/fold check forever.
-        if penalty_day > today:
+        bal.interest_apply_date = charge_day
+        bal.save()
+        nxt = charge_day + relativedelta(months=1)
+        y, m = nxt.year, nxt.month
+        if datetime.date(y, m, 5) > today:
             break
 
-        # ---- 2) Penalty + compounding fold on the 20th, if still unpaid -
-        # Owner toggle: skip penalty entirely for records where
-        # penalty_enabled is False (Feb 2026 rule).
-        penalty_on = True if record.penalty_enabled is None else bool(record.penalty_enabled)
+    # ---- Phase 2: penalty + compounding fold for any month whose 20th --
+    # ---- has passed, is still unpaid, and hasn't been processed yet ----
+    penalty_on = True if record.penalty_enabled is None else bool(record.penalty_enabled)
+
+    pending_charge_rows = InterestPeopleReport.objects.filter(
+        interest=record, type_choice="Interest",
+    ).order_by("reportdate")
+
+    for charge_row in pending_charge_rows:
+        penalty_day = charge_row.reportdate.replace(day=20)
+        if penalty_day > today:
+            continue
+
+        already_penalised = InterestPeopleReport.objects.filter(
+            interest=record, reportdate=penalty_day, type_choice="Penalty",
+        ).exists()
+        already_folded = InterestPeopleReport.objects.filter(
+            interest=record, reportdate=penalty_day, type_choice="Capital Fold",
+        ).exists()
+
+        # Nothing left to do for this month.
+        if already_penalised and (already_folded or not is_capital):
+            continue
+
         still_unpaid = float(bal.intrest_balance_amt or 0) > 0
 
-        if penalty_on and still_unpaid:
-            already_penalised = InterestPeopleReport.objects.filter(
-                interest=record,
-                reportdate=penalty_day,
-                type_choice="Penalty",
-            ).exists()
-            if not already_penalised:
-                if (record.penalty_type or "").lower() == "amount":
-                    pen = float(record.penalty_amount or 0)
-                else:  # percentage
-                    pen = (float(bal.intrest_balance_amt or 0) * float(record.penalty_amount or 0)) / 100.0
-                if pen > 0:
-                    bal.penalty_amt = float(bal.penalty_amt or 0) + pen
-                    bal.penalty_balance_amt = float(bal.penalty_balance_amt or 0) + pen
-                    bal.credit_amt = float(bal.credit_amt or 0) + pen
-                    bal.balance_amt = float(bal.balance_amt or 0) + pen
-                    bal.save()
-                    InterestPeopleReport.objects.create(
-                        management_profile=record.management_profile,
-                        interest=record,
-                        reportdate=penalty_day,
-                        credit_amt=pen,
-                        balance_amt=bal.balance_amt,
-                        type_choice="Penalty",
-                        created_by=record.created_by,
-                    )
-                    applied.append({"month": penalty_day.isoformat(), "penalty": pen})
-
-        # ------------------------------------------------------------
-        # Owner rule (Oct 2026, corrected): "Interest with capital" loans
-        # compound only the months that are STILL UNPAID as of the 20th.
-        # The fold amount is exactly that month's interest charge (`inc`
-        # computed on the 5th, above) — never the whole running balance.
-        # Idempotent via a dedicated "Capital Fold" audit row dated the
-        # 20th, so re-running this function never double-folds.
-        # ------------------------------------------------------------
-        if is_capital and still_unpaid and inc_this_month > 0:
-            already_folded = InterestPeopleReport.objects.filter(
-                interest=record,
-                reportdate=penalty_day,
-                type_choice="Capital Fold",
-            ).exists()
-            if not already_folded:
-                bal.principal_balance = float(bal.principal_balance or 0) + inc_this_month
+        if penalty_on and still_unpaid and not already_penalised:
+            if (record.penalty_type or "").lower() == "amount":
+                pen = float(record.penalty_amount or 0)
+            else:  # percentage
+                pen = (float(bal.intrest_balance_amt or 0) * float(record.penalty_amount or 0)) / 100.0
+            if pen > 0:
+                bal.penalty_amt = float(bal.penalty_amt or 0) + pen
+                bal.penalty_balance_amt = float(bal.penalty_balance_amt or 0) + pen
+                bal.credit_amt = float(bal.credit_amt or 0) + pen
+                bal.balance_amt = float(bal.balance_amt or 0) + pen
                 bal.save()
-                # `credit_amt` here records exactly how much was folded
-                # into principal_balance this month -- it does NOT affect
-                # `balance_amt` (the fold moves nothing into/out of the
-                # collectible balance, it only grows the compounding
-                # base). Kept so the retroactive recompute script can
-                # back it out of principal_balance precisely.
                 InterestPeopleReport.objects.create(
                     management_profile=record.management_profile,
                     interest=record,
                     reportdate=penalty_day,
-                    credit_amt=inc_this_month,
+                    credit_amt=pen,
                     balance_amt=bal.balance_amt,
-                    type_choice="Capital Fold",
+                    type_choice="Penalty",
                     created_by=record.created_by,
                 )
-                applied.append({"month": penalty_day.isoformat(), "fold": inc_this_month})
+                applied.append({"month": penalty_day.isoformat(), "penalty": pen})
 
-        # Advance to next month -- only reached once the 20th has been
-        # reached and processed for this month.
-        bal.interest_apply_date = penalty_day
-        bal.save()
-        nxt = penalty_day + relativedelta(months=1)
-        y, m = nxt.year, nxt.month
-        # Safety: don't loop past today's month.
-        if datetime.date(y, m, 5) > today:
-            break
+        # ------------------------------------------------------------
+        # Owner rule (Oct 2026, corrected): "Interest with capital" loans
+        # compound only the months that are STILL UNPAID as of the 20th.
+        # The fold amount is exactly that month's own interest charge
+        # (`charge_row.credit_amt`) — never the whole running balance.
+        # Idempotent via a dedicated "Capital Fold" audit row dated the
+        # 20th, so re-running this function never double-folds.
+        # ------------------------------------------------------------
+        inc_this_month = float(charge_row.credit_amt or 0)
+        if is_capital and still_unpaid and not already_folded and inc_this_month > 0:
+            bal.principal_balance = float(bal.principal_balance or 0) + inc_this_month
+            bal.save()
+            # `credit_amt` here records exactly how much was folded into
+            # principal_balance this month -- it does NOT affect
+            # `balance_amt` (the fold moves nothing into/out of the
+            # collectible balance, it only grows the compounding base).
+            # Kept so the retroactive recompute script can back it out
+            # of principal_balance precisely.
+            InterestPeopleReport.objects.create(
+                management_profile=record.management_profile,
+                interest=record,
+                reportdate=penalty_day,
+                credit_amt=inc_this_month,
+                balance_amt=bal.balance_amt,
+                type_choice="Capital Fold",
+                created_by=record.created_by,
+            )
+            applied.append({"month": penalty_day.isoformat(), "fold": inc_this_month})
 
     return {"interest_id": record.id, "applied_months": applied}
 
