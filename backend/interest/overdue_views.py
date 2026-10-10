@@ -54,7 +54,7 @@ def _first_pending_month(interest_date: datetime.date, apply_date: datetime.date
 def _process_penalty_fold_for_month(
     record: PeopleInterestDetails,
     bal: PeopleInterestBalanceSheet,
-    charge_row,
+    charge_row: "InterestPeopleReport",
     is_capital: bool,
     penalty_on: bool,
 ) -> list:
@@ -111,10 +111,28 @@ def _process_penalty_fold_for_month(
             )
             applied.append({"month": penalty_day.isoformat(), "penalty": pen})
 
+    # ------------------------------------------------------------
+    # Owner rule (Oct 2026, corrected): "Interest with capital" loans
+    # compound only the months that are STILL UNPAID as of the 20th.
+    # The fold amount is exactly that month's own interest charge
+    # (`charge_row.credit_amt`) — never the whole running balance.
+    # Idempotent via a dedicated "Capital Fold" audit row dated the
+    # 20th, so re-running this function never double-folds. Folding
+    # HERE (right after this month's charge, before the caller moves
+    # on to the next month) is what makes next month's charge see the
+    # correctly compounded principal_balance.
+    # ------------------------------------------------------------
     inc_this_month = float(charge_row.credit_amt or 0)
     if is_capital and still_unpaid and not already_folded and inc_this_month > 0:
         bal.principal_balance = float(bal.principal_balance or 0) + inc_this_month
         bal.save()
+        # `credit_amt` here records exactly how much was folded into
+        # principal_balance this month -- it does NOT affect
+        # `balance_amt` (the fold moves nothing into/out of the
+        # collectible balance, it only grows the compounding base).
+        # Kept so the retroactive recompute script can back it out of
+        # principal_balance precisely, and so `_recompute_report_
+        # balances` can exclude it from the credit/debit ledger sum.
         InterestPeopleReport.objects.create(
             management_profile=record.management_profile,
             interest=record,
@@ -143,6 +161,44 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
     applied = []
     y, m = _first_pending_month(record.interest_date, bal.interest_apply_date)
 
+    # Owner rule (Oct 2026, corrected): for EVERY category, interest for
+    # the month becomes due on the 5th — this is what makes the borrower
+    # show up as "due" in the Collection screen starting the 5th, giving
+    # them a grace window to pay between the 5th and the 20th. On the
+    # 20th, if that running balance (`intrest_balance_amt`) is STILL
+    # UNPAID: penalty is charged (unchanged logic, all categories), and
+    # for "Interest with capital" loans only, that month's charge is
+    # also folded into `principal_balance` so next month compounds on
+    # the larger base. Paying before the 20th skips the fold for that
+    # month entirely.
+    #
+    # Design note: charging and the penalty/fold check are INTERLEAVED
+    # month by month (via `_process_penalty_fold_for_month`), not done
+    # as two separate full passes. This matters for correctness when
+    # catching up several months in a single call (e.g. first time this
+    # loan's page is viewed in a while): if month 1's fold didn't happen
+    # BEFORE month 2's charge is computed, month 2's interest would be
+    # calculated on the stale, pre-fold principal — silently under-
+    # charging true compound interest. Interleaving guarantees each
+    # month's charge sees the correctly compounded principal_balance
+    # from every prior month already folded.
+    #
+    # `bal.interest_apply_date` is still advanced to the 5th immediately
+    # upon charging each month, regardless of whether that month's 20th
+    # has arrived yet — `chitname_withfiltering_category` (the "Choose
+    # Person" dropdown query, in collection/views.py) reads it as the
+    # anchor of the current due window (`window_start = interest_apply_
+    # date`, `window_end = interest_apply_date.replace(day=20)`), so a
+    # borrower charged on the 5th must show up as due right away, not
+    # only once the 20th is also reached.
+    #
+    # A final catch-all sweep (below the main loop) re-scans ALL of this
+    # record's "Interest" rows for any whose day-20 has passed but
+    # wasn't processed yet — this covers a month that was charged in an
+    # EARLIER call (before its 20th had arrived) and never revisited by
+    # the main loop since charging only walks forward from
+    # `interest_apply_date`. Idempotent either way, so nothing here ever
+    # double-charges or double-folds.
     is_capital = (record.interest_category or "").lower() == "interest with capital"
     penalty_on = True if record.penalty_enabled is None else bool(record.penalty_enabled)
 
@@ -181,6 +237,10 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
         bal.interest_apply_date = charge_day
         bal.save()
 
+        # Process this month's penalty/fold NOW (if its 20th has already
+        # passed) -- before moving to next month's charge -- so a
+        # compounding fold is visible to the NEXT month's interest
+        # calculation above.
         if charge_row is not None:
             applied.extend(
                 _process_penalty_fold_for_month(record, bal, charge_row, is_capital, penalty_on)
@@ -191,6 +251,8 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
         if datetime.date(y, m, 5) > today:
             break
 
+    # ---- Catch-all sweep: any "Interest" row whose day-20 has passed --
+    # ---- but wasn't processed above (charged in an earlier call) ------
     pending_charge_rows = InterestPeopleReport.objects.filter(
         interest=record, type_choice="Interest",
     ).order_by("reportdate")
