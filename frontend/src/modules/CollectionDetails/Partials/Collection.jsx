@@ -1178,7 +1178,18 @@ export const Collection = ({ trigger }) => {
       // never these.
       _original_amount: (collectionType === "Chit Interest" || collectionType === "Management Interest") ? 0 : (PlaceFindMem?.balance_amt || PlaceFindMem?.total_bal_amt || 0),
       _original_penalty_amt: PlaceFindMem?.penalty_balance_amt || 0,
-      interst_amt: intCategory === "Interest" ? PlaceFindMem?.interest_current_month : PlaceFindMem?.intrest_balance_amt,
+      // Oct 2026 owner fix: "Interest with capital" now also pulls the
+      // live current-period interest amount (interest_current_month),
+      // same as plain "Interest" — instead of the full accumulated
+      // outstanding balance (intrest_balance_amt). The backend
+      // (balancesheet/serializers.py get_interest_current_month) was
+      // also fixed to compute this live from principal_balance × rate,
+      // rather than returning the loan's stale original interest_amt
+      // snapshot that never updated after a principal payment changed
+      // principal_balance.
+      interst_amt: (intCategory === "Interest" || intCategory === "Interest with capital")
+        ? PlaceFindMem?.interest_current_month
+        : PlaceFindMem?.intrest_balance_amt,
       penalty_amt: PlaceFindMem?.penalty_balance_amt, //          ""
       TotalAmt: PlaceFindMem?.amount, //   Death tariff amount       ""
       interest: PlaceFindMem?.interest,

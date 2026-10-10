@@ -94,6 +94,23 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
                 bal.intrest_balance_amt = float(bal.intrest_balance_amt or 0) + inc
                 bal.credit_amt = float(bal.credit_amt or 0) + inc
                 bal.balance_amt = float(bal.balance_amt or 0) + inc
+
+                # ------------------------------------------------------------
+                # Owner rule (Oct 2026): "Interest with capital" now COMPOUNDS.
+                # Each month's interest charge (computed above as `inc`) is
+                # ALSO folded into `principal_balance`, so next month's
+                # interest is calculated on the larger base — true compound
+                # interest. Scoped strictly to interest_category ==
+                # "Interest with capital"; plain "Interest" is untouched and
+                # keeps the flat monthly charge on the original balance.
+                #
+                # Penalty (block 2, below) is completely unaffected — it
+                # still reads `intrest_balance_amt`, which keeps accumulating
+                # exactly as before and is never folded into principal.
+                # ------------------------------------------------------------
+                if (record.interest_category or "").lower() == "interest with capital":
+                    bal.principal_balance = float(bal.principal_balance or 0) + inc
+
                 bal.save()
                 InterestPeopleReport.objects.create(
                     management_profile=record.management_profile,

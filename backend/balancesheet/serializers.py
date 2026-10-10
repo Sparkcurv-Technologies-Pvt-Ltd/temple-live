@@ -38,8 +38,23 @@ class PeopleInterestBalanceSheetSerializer(serializers.ModelSerializer):
             return None
         
     def get_interest_current_month(self, object3):
+        # Owner fix (Oct 2026): previously returned the loan's stale
+        # interest_amt snapshot (fix_interest_rate_percent × the ORIGINAL
+        # principal_amt at loan creation), which never updated after a
+        # principal payment changed principal_balance. This silently
+        # diverged from what the periodic accrual engine
+        # (_apply_for_record in interest/overdue_views.py) actually
+        # charges each period, which always uses the CURRENT
+        # principal_balance. Now computed live, the same way, so this
+        # always matches the real current-period interest amount.
         if object3.interest_id:
-            return object3.interest.interest_amt
+            interest_obj = object3.interest
+            principal_balance = float(object3.principal_balance or 0)
+            rate = float(interest_obj.fix_interest_rate_percent or 0)
+            if (interest_obj.interest_type_new or "").lower() == "percentage":
+                return round((principal_balance * rate) / 100.0, 2)
+            else:  # flat ₹ amount
+                return round(rate, 2)
         else:
             return None
         
