@@ -151,7 +151,21 @@ class Command(BaseCommand):
             )
             tail_count = tail_qs.count()
 
-            if tail_count == 0:
+            # Tail "Capital Fold" rows (Oct 2026 day-5/day-20 rule): each
+            # one records exactly how much was folded into
+            # principal_balance for a month that was still unpaid on the
+            # 20th. These must be deleted and backed out of
+            # principal_balance too, or re-walking the tail would
+            # recompute (and refold) the same months on top of a
+            # principal_balance that still carries the old fold.
+            fold_qs = InterestPeopleReport.objects.filter(
+                interest=record,
+                type_choice="Capital Fold",
+                reportdate__gt=anchor_date,
+            )
+            old_fold_sum = sum(float(r.credit_amt or 0) for r in fold_qs)
+
+            if tail_count == 0 and fold_qs.count() == 0:
                 plan.append({
                     "record": record, "bal": bal, "skip": "no unpaid tail",
                     "anchor_date": anchor_date, "last_payment": last_payment,
@@ -163,6 +177,7 @@ class Command(BaseCommand):
                 "record": record, "bal": bal, "skip": None,
                 "anchor_date": anchor_date, "last_payment": last_payment,
                 "tail_count": tail_count, "old_tail_sum": old_tail_sum,
+                "old_fold_sum": old_fold_sum,
             })
 
         self.stdout.write(self.style.NOTICE(
@@ -187,6 +202,7 @@ class Command(BaseCommand):
                 f"    - id={r.id}  {r.people_name}  intrest_no={r.intrest_no}  "
                 f"{pay_desc}  tail_months={p['tail_count']}  "
                 f"old_tail_interest_sum={p['old_tail_sum']:.2f}  "
+                f"old_tail_fold_sum={p['old_fold_sum']:.2f}  "
                 f"current principal_balance={float(p['bal'].principal_balance or 0):.2f}"
             )
 
@@ -223,40 +239,44 @@ class Command(BaseCommand):
             bal = p["bal"]
             anchor_date = p["anchor_date"]
             old_tail_sum = p["old_tail_sum"]
+            old_fold_sum = p["old_fold_sum"]
 
             with transaction.atomic():
-                # 1) Delete only the unpaid-tail "Interest" rows (strictly
-                #    after the loan's last real payment, or after
-                #    interest_date if it never had one). Everything up to
-                #    and including that payment -- plus all Penalty,
+                # 1) Delete the unpaid-tail "Interest" AND "Capital Fold"
+                #    rows (strictly after the loan's last real payment, or
+                #    after interest_date if it never had one). Everything
+                #    up to and including that payment -- plus all Penalty,
                 #    Initial, and Payment rows -- is left completely alone.
                 InterestPeopleReport.objects.filter(
                     interest=record,
-                    type_choice="Interest",
+                    type_choice__in=["Interest", "Capital Fold"],
                     reportdate__gt=anchor_date,
                 ).delete()
 
                 # 2) Back out the tail's old flat-interest totals from the
-                #    running balance-sheet fields. principal_balance is
-                #    NOT reset -- its current value already correctly
-                #    reflects the loan as of the last real payment, since
-                #    the old code only ever moved it via real payments,
-                #    never via compounding (compounding didn't exist yet).
+                #    running balance-sheet fields, AND back out any
+                #    Capital Fold amounts that were folded into
+                #    principal_balance within the tail being recomputed
+                #    (old_fold_sum). principal_balance is NOT reset to
+                #    anything else -- only this tail's folds are removed,
+                #    since everything up to the anchor date (including any
+                #    legitimate earlier fold) must stay untouched.
                 bal.refresh_from_db()
                 bal.intrest_amt = max(0.0, float(bal.intrest_amt or 0) - old_tail_sum)
                 bal.intrest_balance_amt = max(0.0, float(bal.intrest_balance_amt or 0) - old_tail_sum)
                 bal.credit_amt = max(0.0, float(bal.credit_amt or 0) - old_tail_sum)
                 bal.balance_amt = max(0.0, float(bal.balance_amt or 0) - old_tail_sum)
+                bal.principal_balance = max(0.0, float(bal.principal_balance or 0) - old_fold_sum)
                 bal.interest_apply_date = anchor_date
                 bal.save()
 
                 # 3) Re-walk forward from the anchor date to today using
-                #    the already-deployed compounding logic in
+                #    the already-deployed day-5/day-20 logic in
                 #    _apply_for_record -- this recreates the "Interest"
-                #    rows month by month for just the unpaid tail, folding
-                #    each month's charge into principal_balance before
-                #    computing the next month's. Penalty logic inside
-                #    _apply_for_record is unchanged and untouched.
+                #    rows due on the 5th, and, for months still unpaid on
+                #    the 20th, the "Penalty" and "Capital Fold" rows,
+                #    folding each such month's charge into
+                #    principal_balance before computing the next month's.
                 result = _apply_for_record(record)
 
             bal.refresh_from_db()
