@@ -70,11 +70,27 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
     applied = []
     y, m = _first_pending_month(record.interest_date, bal.interest_apply_date)
 
+    # Owner fix (Oct 2026): "Interest with capital" loans now charge (and
+    # compound into principal_balance) on the 20th of the month, not the
+    # 5th — the earlier day-5 fold was a mistake. Plain "Interest" loans
+    # are untouched and keep the original day-5 charge. Penalty always
+    # stays on day 20 regardless of category (unchanged).
+    #
+    # Owner-confirmed consequence: for "Interest with capital" loans this
+    # means interest and penalty now land on the SAME day each month —
+    # there is no 15-day grace window between them for this category
+    # (there still is for plain "Interest", since that one still charges
+    # on day 5 while penalty stays on day 20).
+    is_capital = (record.interest_category or "").lower() == "interest with capital"
+    interest_day_num = 20 if is_capital else 5
+
     while True:
-        checking_day = datetime.date(y, m, 5)
+        checking_day = datetime.date(y, m, interest_day_num)
         penalty_day = datetime.date(y, m, 20)
 
-        # Nothing to do until we've reached the 5th of the target month.
+        # Nothing to do until we've reached the interest charge day of
+        # the target month (the 20th for "Interest with capital", the
+        # 5th for every other category).
         if checking_day > today:
             break
 
@@ -161,7 +177,7 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
         nxt = checking_day + relativedelta(months=1)
         y, m = nxt.year, nxt.month
         # Safety: don't loop past today's month.
-        if datetime.date(y, m, 5) > today:
+        if datetime.date(y, m, interest_day_num) > today:
             break
 
     return {"interest_id": record.id, "applied_months": applied}

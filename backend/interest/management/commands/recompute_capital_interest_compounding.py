@@ -85,6 +85,17 @@ class Command(BaseCommand):
             help="Limit to a single interest record id (PeopleInterestDetails.id), "
                  "for testing on one loan before running the full batch.",
         )
+        parser.add_argument(
+            "--exclude",
+            type=str,
+            default="",
+            help="Comma-separated interest record ids to SKIP from the batch "
+                 "-- for loans whose principal_balance already has compounding "
+                 "folded into it live (verify with diagnose_fold_risk.py first), "
+                 "where this script's assumption that principal_balance was "
+                 "never touched by compounding does not hold. "
+                 "Example: --exclude=7,42",
+        )
 
     def _find_anchor(self, record):
         """Return (anchor_date, last_payment_row_or_None).
@@ -106,6 +117,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         single_id = options["id"]
+        exclude_ids = [
+            int(x) for x in (options["exclude"] or "").split(",") if x.strip()
+        ]
 
         qs = PeopleInterestDetails.objects.filter(
             action=True,
@@ -113,6 +127,11 @@ class Command(BaseCommand):
         )
         if single_id:
             qs = qs.filter(id=single_id)
+        if exclude_ids:
+            qs = qs.exclude(id__in=exclude_ids)
+            self.stdout.write(self.style.WARNING(
+                f"Excluding id(s) {exclude_ids} from this run."
+            ))
 
         plan = []  # list of dicts describing what will happen per loan
 
