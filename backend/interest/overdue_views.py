@@ -112,19 +112,24 @@ def _process_penalty_fold_for_month(
             applied.append({"month": penalty_day.isoformat(), "penalty": pen})
 
     # ------------------------------------------------------------
-    # Owner rule (Oct 2026, corrected): "Interest with capital" loans
-    # compound only the months that are STILL UNPAID as of the 20th.
-    # The fold amount is exactly that month's own interest charge
-    # (`charge_row.credit_amt`) — never the whole running balance.
+    # Owner rule (Oct 2026, FINAL correction): "Interest with capital"
+    # loans fold whatever is STILL ACTUALLY OUTSTANDING in
+    # intrest_balance_amt as of the 20th -- not the fixed amount
+    # originally charged that month. A partial payment made before the
+    # 20th reduces what gets folded (e.g. charged 1545, 1500 paid ->
+    # only the remaining 45 folds into principal). Folding clears
+    # intrest_balance_amt to 0, since that debt is now principal and
+    # must not also still show as interest owed.
     # Idempotent via a dedicated "Capital Fold" audit row dated the
     # 20th, so re-running this function never double-folds. Folding
     # HERE (right after this month's charge, before the caller moves
     # on to the next month) is what makes next month's charge see the
     # correctly compounded principal_balance.
     # ------------------------------------------------------------
-    inc_this_month = float(charge_row.credit_amt or 0)
-    if is_capital and still_unpaid and not already_folded and inc_this_month > 0:
-        bal.principal_balance = float(bal.principal_balance or 0) + inc_this_month
+    fold_amt = float(bal.intrest_balance_amt or 0)
+    if is_capital and still_unpaid and not already_folded and fold_amt > 0:
+        bal.principal_balance = float(bal.principal_balance or 0) + fold_amt
+        bal.intrest_balance_amt = 0.0
         bal.save()
         # `credit_amt` here records exactly how much was folded into
         # principal_balance this month -- it does NOT affect
@@ -137,12 +142,12 @@ def _process_penalty_fold_for_month(
             management_profile=record.management_profile,
             interest=record,
             reportdate=penalty_day,
-            credit_amt=inc_this_month,
+            credit_amt=fold_amt,
             balance_amt=bal.balance_amt,
             type_choice="Capital Fold",
             created_by=record.created_by,
         )
-        applied.append({"month": penalty_day.isoformat(), "fold": inc_this_month})
+        applied.append({"month": penalty_day.isoformat(), "fold": fold_amt})
 
     return applied
 

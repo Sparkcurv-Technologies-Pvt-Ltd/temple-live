@@ -508,11 +508,26 @@ def add_collection_details(request):
                             _int_pay = float(temp_family.interst_amount or 0)
                             _pen_settled = _pen_pay + _discount
 
-                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_pay
-                            festival_get.intrest_balance_amt = max(
-                                0.0,
-                                float(festival_get.intrest_balance_amt) - _int_pay,
-                            )
+                            # Owner rule (Oct 2026): interest is purely a function of
+                            # principal_balance -- there is never a legitimate reason to pay
+                            # MORE interest than is currently outstanding. Any amount entered
+                            # here beyond the current intrest_balance_amt is treated as an
+                            # early principal payment instead of silently vanishing from the
+                            # tracked breakdown (previously: clamped to 0 and discarded).
+                            _int_balance_before = float(festival_get.intrest_balance_amt or 0)
+                            _int_applied = min(_int_pay, _int_balance_before)
+                            _int_overflow = max(0.0, _int_pay - _int_balance_before)
+
+                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_applied
+                            festival_get.intrest_balance_amt = max(0.0, _int_balance_before - _int_applied)
+
+                            if _int_overflow > 0:
+                                festival_get.principal_paid = float(festival_get.principal_paid) + _int_overflow
+                                festival_get.principal_balance = max(
+                                    0.0,
+                                    float(festival_get.principal_balance) - _int_overflow,
+                                )
+
                             festival_get.penalty_paid_amt = float(festival_get.penalty_paid_amt) + _pen_settled
                             festival_get.penalty_balance_amt = max(
                                 0.0,
