@@ -38,25 +38,19 @@ class PeopleInterestBalanceSheetSerializer(serializers.ModelSerializer):
             return None
         
     def get_interest_current_month(self, object3):
-        # Owner fix (Oct 2026): previously returned the loan's stale
-        # interest_amt snapshot (fix_interest_rate_percent × the ORIGINAL
-        # principal_amt at loan creation), which never updated after a
-        # principal payment changed principal_balance. This silently
-        # diverged from what the periodic accrual engine
-        # (_apply_for_record in interest/overdue_views.py) actually
-        # charges each period, which always uses the CURRENT
-        # principal_balance. Now computed live, the same way, so this
-        # always matches the real current-period interest amount.
-        if object3.interest_id:
-            interest_obj = object3.interest
-            principal_balance = float(object3.principal_balance or 0)
-            rate = float(interest_obj.fix_interest_rate_percent or 0)
-            if (interest_obj.interest_type_new or "").lower() == "percentage":
-                return round((principal_balance * rate) / 100.0, 2)
-            else:  # flat ₹ amount
-                return round(rate, 2)
-        else:
-            return None
+        # Owner rule (Oct 2026, FINAL correction): this field feeds the
+        # Collection screen's "Interest Amt" payment field, which must
+        # show what is ACTUALLY still outstanding right now -- not a
+        # theoretical full this-month charge computed from
+        # principal_balance x rate. That theoretical figure ignores any
+        # payment already made this month (e.g. charged 1545, 1500 paid,
+        # 45 left -- but this used to still show "1545"), which is very
+        # likely why staff were re-entering near-duplicate payments:
+        # they were trusting this number, not the real balance.
+        # intrest_balance_amt already tracks exactly the live owed
+        # amount (reduced by every payment, reset by the periodic
+        # accrual engine each month), so this now simply mirrors it.
+        return float(object3.intrest_balance_amt or 0)
         
         
 class FundBalanceSheetSerializer(serializers.ModelSerializer):
