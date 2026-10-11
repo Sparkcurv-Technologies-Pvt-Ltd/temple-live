@@ -107,6 +107,14 @@ class PeopleInterestBalanceDetailsSerializer(serializers.ModelSerializer):
     # photo=serializers.ImageField(required=False)
     # action = serializers.BooleanField(default=True)
     amount = serializers.SerializerMethodField()
+    # Owner rule (Oct 2026): the Collection screen's "Interest Amt" field
+    # must show what is ACTUALLY still outstanding right now, not the
+    # static per-loan configured amount -- otherwise a partially-paid
+    # month (e.g. charged 1545, 1500 already paid, 45 left) still
+    # displays "1545", inviting a near-duplicate overpayment. Falls back
+    # to the static PeopleInterestDetails.interest_amt only when the loan
+    # has no balance sheet yet (should not happen in practice).
+    interest_amt = serializers.SerializerMethodField()
     class Meta:
         model =PeopleInterestDetails
         fields = ['id','management_profile','intrest_no','interest_category','interest_type','chitt_fund',
@@ -125,3 +133,9 @@ class PeopleInterestBalanceDetailsSerializer(serializers.ModelSerializer):
             + float(interest_balance_sheet.intrest_balance_amt or 0)
             + float(interest_balance_sheet.penalty_balance_amt or 0)
         )
+
+    def get_interest_amt(self, obj):
+        interest_balance_sheet = PeopleInterestBalanceSheet.objects.filter(interest=obj).first()
+        if not interest_balance_sheet:
+            return obj.interest_amt
+        return float(interest_balance_sheet.intrest_balance_amt or 0)
