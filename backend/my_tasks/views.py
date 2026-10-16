@@ -408,6 +408,27 @@ def subscription_delete():
         for peoples in people_amount:
             logger.info(peoples)
 
+            # Owner fix (permanent, Oct 2026): self-heal penalty_amount.
+            # It's normally snapshotted onto the bill at creation time
+            # (sub_tariff/views.py), but 74 historical bills were found
+            # stuck at penalty_amount=0 despite their tariff being
+            # configured with a real penalty -- so the penalty got
+            # flagged and logged, but never actually charged. The
+            # original cause couldn't be traced after the fact (logs had
+            # rotated away), so instead of trusting the stored snapshot,
+            # recompute the correct amount LIVE from tariff_check every
+            # time this runs, using the exact same formula as creation
+            # time. This makes the charge self-correcting even if the
+            # stored value is ever wrong again.
+            if tariff_check.penalty_amount_type == "Amount":
+                live_penalty_amt = float(tariff_check.penalty_amt or 0)
+            elif tariff_check.penalty_amount_type == "Percentage":
+                live_penalty_amt = float(tariff_check.tariff_amount or 0) * (float(tariff_check.penalty_amt or 0) / 100)
+            else:
+                live_penalty_amt = float(peoples.penalty_amount or 0)
+            if live_penalty_amt > 0 and float(peoples.penalty_amount or 0) != live_penalty_amt:
+                peoples.penalty_amount = live_penalty_amt
+
             # Idempotency guard: only apply the penalty to the running
             # balance ONCE.  Without this, every re-run of this task
             # inflates amount_balance / total_bal_amt by penalty_amount.
@@ -459,6 +480,20 @@ def subscription_delete():
             for peoples_festival in peoples_amount_festival:
                 logger.info(peoples_festival)
                 logger.info("vvvvvvvvvvv")
+
+                # Owner fix (permanent, Oct 2026): self-heal penalty_amount
+                # the same way as the subscription-tariff path above --
+                # recompute live from the festival's own choice/penalty_amt
+                # config instead of trusting a possibly-stale stored value.
+                if i.choice == "Amount":
+                    live_penalty_amt = float(i.penalty_amt or 0)
+                elif i.choice == "Percentage":
+                    live_penalty_amt = float(i.tax_per_head or 0) * (float(i.penalty_amt or 0) / 100)
+                else:
+                    live_penalty_amt = float(peoples_festival.penalty_amount or 0)
+                if live_penalty_amt > 0 and float(peoples_festival.penalty_amount or 0) != live_penalty_amt:
+                    peoples_festival.penalty_amount = live_penalty_amt
+
                 # Idempotency guard: only add penalty to running balance ONCE.
                 already_applied = bool(peoples_festival.penalty)
                 peoples_festival.penalty = True

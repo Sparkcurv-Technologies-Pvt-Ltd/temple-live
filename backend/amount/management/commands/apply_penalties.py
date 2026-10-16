@@ -66,6 +66,21 @@ class Command(BaseCommand):
             for bill in bills:
                 member = bill.member
 
+                # Owner fix (permanent, Oct 2026): self-heal penalty_amount
+                # live from the festival's own config before deciding
+                # anything below. See _apply_subscription_tariff_penalties
+                # above and my_tasks/views.py for the full rationale.
+                if not dry_run:
+                    if fest.choice == "Amount":
+                        live_penalty_amt = float(fest.penalty_amt or 0)
+                    elif fest.choice == "Percentage":
+                        live_penalty_amt = float(fest.tax_per_head or 0) * (float(fest.penalty_amt or 0) / 100)
+                    else:
+                        live_penalty_amt = float(bill.penalty_amount or 0)
+                    if live_penalty_amt > 0 and float(bill.penalty_amount or 0) != live_penalty_amt:
+                        bill.penalty_amount = live_penalty_amt
+                        bill.save(update_fields=["penalty_amount"])
+
                 needs_new_penalty = not bill.penalty
                 # IMPORTANT: once penalty=True, amount_balance already has the
                 # penalty folded in. Only compare total_bal_amt against
@@ -144,6 +159,23 @@ class Command(BaseCommand):
 
             for bill in bills:
                 member = bill.member
+
+                # Owner fix (permanent, Oct 2026): self-heal penalty_amount
+                # live from the tariff's own config before deciding
+                # anything below, the same fix applied to the equivalent
+                # code path in my_tasks/views.py. See that file for the
+                # full rationale (74 historical bills found stuck at
+                # penalty_amount=0 despite being penalty=True).
+                if not dry_run:
+                    if tariff.penalty_amount_type == "Amount":
+                        live_penalty_amt = float(tariff.penalty_amt or 0)
+                    elif tariff.penalty_amount_type == "Percentage":
+                        live_penalty_amt = float(tariff.tariff_amount or 0) * (float(tariff.penalty_amt or 0) / 100)
+                    else:
+                        live_penalty_amt = float(bill.penalty_amount or 0)
+                    if live_penalty_amt > 0 and float(bill.penalty_amount or 0) != live_penalty_amt:
+                        bill.penalty_amount = live_penalty_amt
+                        bill.save(update_fields=["penalty_amount"])
 
                 needs_new_penalty = not bill.penalty
                 needs_stale_fix = bill.penalty and float(bill.total_bal_amt) < float(bill.amount_balance)
