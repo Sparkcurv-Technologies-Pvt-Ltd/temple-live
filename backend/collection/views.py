@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -117,6 +118,7 @@ def add_collection_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1388,6 +1390,7 @@ def edit_collections_details(request, pk):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -2688,6 +2691,7 @@ def get_select_type(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -2838,6 +2842,7 @@ def get_select_member_collection(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3008,6 +3013,7 @@ def get_active_sub_tarrif(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3036,6 +3042,7 @@ def get_amount_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3126,6 +3133,7 @@ def get_sub_tariff_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3165,6 +3173,7 @@ def get_member_balance(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3211,6 +3220,7 @@ def get_marriage_detail(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3250,6 +3260,7 @@ def collection_summary_user(request, pk):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3285,6 +3296,7 @@ def collection_summary_user_date(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3324,6 +3336,7 @@ def collection_user_list(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3395,6 +3408,7 @@ def collection_list_filter_by_user(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3444,6 +3458,7 @@ def unpaid_list(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3487,12 +3502,14 @@ def unpaid_list(request):
             if get_role == "User" and perm.death_tariff == True or get_role == "Admin" or rejin.is_superuser == True:
                 # FIX: scoped to the death tariff's validity window, same
                 # pattern as Festival/Subscription Tariff above.
-                # >>> Replace `end_date` below with your real field name <
+                # DeathDetails has no `end_date`; its collection window ends
+                # at `penalty_apply_date` (the old placeholder raised a
+                # FieldError -> HTTP 500 on every request).
                 today = date.today()
                 fund = DeathDetails.objects.filter(
                     mangement=management,
                     old_death=False,
-                    end_date__gte=today,   # <-- confirm/replace field name
+                    penalty_apply_date__gte=today,
                 )
                 serializer = DeathDetailsSerializer(fund, many=True)
             else:
@@ -3509,6 +3526,7 @@ def unpaid_list_member(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3548,12 +3566,13 @@ def unpaid_list_member(request):
         elif data == "Death Tariff":
             # FIX: scoped to the death tariff's validity window, same as
             # Subscription Tariff / Festival above.
-            # >>> Replace `end_date` below with your real field name <
+            # DeathDetails has no `end_date`; use `penalty_apply_date`
+            # (the old placeholder raised a FieldError -> HTTP 500).
             amount = PeoplesAmountDetails.objects.filter(
                 death_id=type,
                 management_profile=management,
                 paid=False,
-                death__end_date__gte=today,   # <-- confirm/replace field name
+                death__penalty_apply_date__gte=today,
             )
 
         elif data == "Marriage":
@@ -3579,6 +3598,7 @@ def unpaid_list_member_date_filter(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3661,6 +3681,7 @@ def collection_amountdetails_filter_by_user_list(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -3955,6 +3976,7 @@ def collection_amountdetails_filter_by_user(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -4301,6 +4323,7 @@ def management_interest_member_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -4356,6 +4379,7 @@ def chit_fund_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -4387,6 +4411,7 @@ def chitfund_interest_member_details(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -4517,6 +4542,7 @@ def chitname_withfiltering_category(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role is not None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -4732,6 +4758,7 @@ def interest_balance_collection(request):
     if not rejin.is_active:
         return Response({"message": "Not Authorized Please Contact Admin"}, status=status.HTTP_401_UNAUTHORIZED)
     get_role = rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role != None:
         permiss = Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:

@@ -122,19 +122,28 @@ class TestSubscriptionTariffEmpty:
         assert isinstance(data, list)
         returned_count = len(data)
 
+        # Current rule: the fallback is the newest tariff that is active AND
+        # whose collection window (from_date..to_date) covers today. Once the
+        # window has closed, overdue dues are collected via the "Balance"
+        # category instead, so an empty list is correct.
         with db_conn.cursor() as cur:
             cur.execute(
                 "SELECT id FROM sub_tariff_addsubscriptiontariffdetails "
-                "WHERE action=1 ORDER BY id DESC LIMIT 1"
+                "WHERE action=1 AND from_date<=CURDATE() AND to_date>=CURDATE() "
+                "ORDER BY id DESC LIMIT 1"
             )
             row = cur.fetchone()
-            assert row, "no active subscription tariff in DB"
+            if row is None:
+                assert returned_count == 0, (
+                    f"no tariff window covers today, expected 0 members, got {returned_count}"
+                )
+                return
             latest_id = row["id"]
 
             cur.execute(
                 "SELECT COUNT(DISTINCT member_id) AS c "
                 "FROM amount_peoplesamountdetails "
-                "WHERE sub_tariff_id=%s AND paid=0",
+                "WHERE sub_tariff_id=%s AND paid=0 AND total_bal_amt>0",
                 (latest_id,),
             )
             expected_count = cur.fetchone()["c"]

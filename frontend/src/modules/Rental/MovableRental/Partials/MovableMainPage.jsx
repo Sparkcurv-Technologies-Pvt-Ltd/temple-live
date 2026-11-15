@@ -32,6 +32,7 @@ import {
 import { APIURLS } from "@request/apiUrls/urls";
 import request from "@request/request";
 import successHandler from "@request/successHandler";
+import errorHandler from "@request/errorHandler";
 
 import { Col, Form } from "antd";
 import React, { useEffect, useState } from "react";

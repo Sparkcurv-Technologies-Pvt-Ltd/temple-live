@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,6 +19,7 @@ def add_asset_category_details(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -66,10 +68,11 @@ def edit_asset_category_details(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(irole_link_idd=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
             
     check_management=ManagementDetails.objects.all()
     if not check_management:
@@ -145,6 +148,7 @@ def add_asset_details(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -203,6 +207,7 @@ def edit_asset_details(request,pk):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -359,6 +364,7 @@ def add_movableasset_category_details(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -407,6 +413,7 @@ def edit_movableasset_category_details(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -485,6 +492,7 @@ def add_movableasset_details(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -545,6 +553,7 @@ def edit_movableasset_details(request,pk):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:

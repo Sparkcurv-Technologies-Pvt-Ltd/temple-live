@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -43,10 +44,11 @@ def add_fund_name_details(request):
         management=ManagementDetails.objects.all().first()
     if request.method =='POST': 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)    
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)    
         serializer876 = ADDFundDetailsSerializer(data=request.data)
  
         if (get_role=="User" and perm.fund_add ==True) or get_role=="Admin" or rejin.is_superuser == True or (get_role=="User" and perm.fund_view ==True) or (get_role=="User" and perm.fund_edit ==True):
@@ -94,10 +96,11 @@ def fund_group_view_fundname(request):
         management=ManagementDetails.objects.all().first() 
     if request.method =='GET':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_add ==True):            
             our_family = ADDFundDetails.objects.filter(management_profile=management,action=True)
             serializer = ADDFundDetailsSerializer(our_family,many=True)
@@ -131,10 +134,11 @@ def edit_fund_name_details(request,pk):
     
     elif request.method == 'PUT':   
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)   
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)   
         serializer876 = ADDFundDetailsSerializer(customer,data=request.data)
         if (get_role=="User" and perm.fund_edit ==True) or get_role=="Admin" or rejin.is_superuser == True :
 
@@ -185,10 +189,11 @@ def edit_fund_name_details(request,pk):
             
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_del ==True):
             group=FundGroupDetails.objects.filter(fund=customer,management_profile=management).first()
             # sheet=CollectionDetails.objects.filter(funds=group,management_profile=management)
@@ -217,10 +222,11 @@ def get_fund_groups(request):
         management=ManagementDetails.objects.all().first() 
     if request.method =='POST':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_add ==True):
             fund=request.data['fund']
             fund_details=ADDFundDetails.objects.get(id=fund)
@@ -249,10 +255,11 @@ def add_fund_groups(request):
     if request.method =='POST':     
         serializer876 = FundGroupDetailsSerializer(data=request.data)
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id) 
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id) 
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_add ==True):
          
             if serializer876.is_valid():
@@ -470,10 +477,11 @@ def edit_fund_groups(request,pk):
     
     elif request.method == 'PUT':   
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_edit ==True):
      
             serializer876 = FundGroupDetailsSerializer(customer,data=request.data)
@@ -750,10 +758,11 @@ def edit_fund_groups(request,pk):
             
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_del ==True):
             sheet=CollectionDetails.objects.filter(funds=pk,fund_type=None)
             if sheet:
@@ -787,10 +796,11 @@ def fund_lease_details(request):
         management=ManagementDetails.objects.all().first()
     if request.method =='POST':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_add ==True):
            
         
@@ -1002,10 +1012,11 @@ def edit_fund_lease_details(request,pk):
     
     elif request.method == 'PUT':   
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_edit ==True):
 
          
@@ -1247,10 +1258,11 @@ def edit_fund_lease_details(request,pk):
             
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
-            permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+            permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
-                perm=Permisions.objects.get(id=rejin.my_role.id)  
+                perm=Permisions.objects.get(role_link_id=rejin.my_role.id)  
         if  get_role=="Admin" or rejin.is_superuser == True  or (get_role=="User" and perm.fund_del ==True):
             sheet_check=CollectionDetails.objects.filter(fund_lease=pk)
             if sheet_check:

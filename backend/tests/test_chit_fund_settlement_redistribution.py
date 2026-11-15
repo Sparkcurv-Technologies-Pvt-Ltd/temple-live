@@ -1,20 +1,29 @@
 """
-Regression test for the "Management share also gets redistribution" fix.
+Regression test for chit-fund settlement applications.
 
-Business rule (from user):
-    When an investor exits a chit fund, their share_count must be
-    redistributed to the remaining shareholders — which includes the
-    Management (typically 1 share) as well as the remaining active
-    investors — proportional to their current holdings.  Nothing may
-    vanish; total_share_count stays consistent with its two components.
+Business rule (owner-confirmed, current code in
+`chit_fund/views.py::add_chit_fund_settlement_application_details`):
+    When an investor exits a chit fund, their shares LEAVE the pool.
+    They are NOT redistributed to Management or the remaining investors.
+      * investers_share_count drops by exactly the exiting share_count
+      * management_share_count is unchanged
+      * remaining investors' share_count is unchanged
+      * total_share_count == management_share_count + investers_share_count
 
-We exercise `add_chit_fund_settlement_application_details` end-to-end via
-the API.
+WARNING: this test WRITES to the configured database (creates a settlement
+application and resets the admin@gmail.com password). It is skipped unless
+TEMPLE_ALLOW_DB_TESTS=1 is set. NEVER run it against the live database.
 """
 import os
 import sys
 import django
 import pytest
+
+if os.environ.get("TEMPLE_ALLOW_DB_TESTS") != "1":
+    pytest.skip(
+        "writes to the database; set TEMPLE_ALLOW_DB_TESTS=1 on a dev/test DB only",
+        allow_module_level=True,
+    )
 
 sys.path.insert(0, "/app/backend")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "temple_proj.settings.settings")
@@ -41,14 +50,13 @@ def _login(client):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_management_share_included_in_redistribution():
+def test_exiting_shares_leave_the_pool():
     fund = ChitFundsDetails.objects.first()
     assert fund is not None, "seed data missing"
 
     initial_mgmt = int(fund.management_share_count or 0)
-    initial_invs_count = int(fund.investers_share_count or 0)
-    initial_total = int(fund.total_share_count or 0)
-    assert initial_total == initial_mgmt + initial_invs_count
+    initial_invs = int(fund.investers_share_count or 0)
+    assert int(fund.total_share_count or 0) == initial_mgmt + initial_invs
 
     exiting = (
         ChitFundInvesters.objects
@@ -60,76 +68,43 @@ def test_management_share_included_in_redistribution():
     exit_shares = int(exiting.share_count or 0)
     assert exit_shares > 0
 
-    remaining_before = list(
-        ChitFundInvesters.objects
+    others_before = {
+        i.id: int(i.share_count or 0)
+        for i in ChitFundInvesters.objects
         .filter(chitt_fund=fund, settled=False, action=True)
         .exclude(id=exiting.id)
-    )
-    baseline = {i.id: int(i.share_count or 0) for i in remaining_before}
-    remaining_before_total = sum(baseline.values())
-    denom = initial_mgmt + remaining_before_total
-    assert denom > 0
+    }
 
     client = Client(HTTP_HOST="testserver")
     jwt = _login(client)
-
     resp = client.post(
         "/api/chit_fund/add_chit_fund_settlement_application_details/",
-        data={
-            "chitt_fund": fund.id,
-            "investers": exiting.id,
-            "settlement_date": "2030-02-10",
-        },
+        data={"chitt_fund": fund.id, "investers": exiting.id, "settlement_date": "2030-02-10"},
         content_type="application/json",
         HTTP_AUTHORIZATION=jwt,
     )
     assert resp.status_code == 201, resp.content
 
     fund.refresh_from_db()
-    new_mgmt = int(fund.management_share_count or 0)
-    new_invs = int(fund.investers_share_count or 0)
-
-    # 1. Management share_count is >= its original value (never loses).
-    assert new_mgmt >= initial_mgmt, (
-        f"management_share_count regressed: {initial_mgmt} -> {new_mgmt}"
-    )
-
-    # 2. When mgmt has a nonzero share, and exit_shares are large enough to
-    #    give it at least the proportional slice, mgmt actually GAINS shares.
-    expected_mgmt_bonus_floor = (exit_shares * initial_mgmt) // denom
-    assert new_mgmt >= initial_mgmt + expected_mgmt_bonus_floor, (
-        f"management_share_count did not receive its proportional bonus: "
-        f"expected >= {initial_mgmt + expected_mgmt_bonus_floor}, got {new_mgmt}"
-    )
-
-    # 3. total_share_count == management + investers (invariant).
-    assert int(fund.total_share_count or 0) == new_mgmt + new_invs
-
-    # 4. Exiting investor's share is fully consumed (no leftover in pool).
     exiting.refresh_from_db()
     assert exiting.action is False
 
-    # 5. Sum of remaining shares (mgmt + all active investors) equals the
-    #    original total minus the exiting investor's share_count (nothing
-    #    vanishes and nothing is created).
-    remaining_after_total = sum(
-        int(i.share_count or 0)
-        for i in ChitFundInvesters.objects.filter(
-            chitt_fund=fund, settled=False, action=True
-        ).exclude(id=exiting.id)
+    assert int(fund.management_share_count or 0) == initial_mgmt, "management shares must not change"
+    assert int(fund.investers_share_count or 0) == initial_invs - exit_shares
+    assert int(fund.total_share_count or 0) == (
+        int(fund.management_share_count or 0) + int(fund.investers_share_count or 0)
     )
-    mgmt_bonus = new_mgmt - initial_mgmt
-    investor_bonus = remaining_after_total - remaining_before_total
-    assert mgmt_bonus + investor_bonus == exit_shares, (
-        f"lost/created shares: mgmt_bonus={mgmt_bonus}, "
-        f"investor_bonus={investor_bonus}, exit_shares={exit_shares}"
-    )
+
+    others_after = {
+        i.id: int(i.share_count or 0)
+        for i in ChitFundInvesters.objects.filter(id__in=others_before.keys())
+    }
+    assert others_after == others_before, "remaining investors' shares must not change"
 
 
 @pytest.mark.django_db(transaction=True)
 def test_total_share_count_stays_consistent():
-    """After redistribution, `total_share_count` MUST equal
-    `management_share_count + investers_share_count`."""
+    """`total_share_count` MUST equal management + investers share counts."""
     fund = ChitFundsDetails.objects.first()
     fund.refresh_from_db()
     assert int(fund.total_share_count or 0) == (

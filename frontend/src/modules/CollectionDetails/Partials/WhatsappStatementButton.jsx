@@ -8,8 +8,10 @@ import { Button } from "@components/form";
 // `interest` FK, so we resolve them via the borrower's interest record.
 const INTEREST_CATEGORIES = new Set(["Chit Interest", "Management Interest"]);
 
-const API_BASE =
-  import.meta.env?.VITE_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || "";
+// `process` does not exist in the browser (Vite), so the old
+// `process.env.REACT_APP_BACKEND_URL` fallback threw a ReferenceError
+// whenever VITE_BACKEND_URL was unset.
+const API_BASE = import.meta.env?.VITE_BACKEND_URL || "";
 
 /**
  * Resolve the origin (scheme + host) of the API when API_BASE is empty.

@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -23,6 +24,7 @@ def add_income_categry(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -65,6 +67,7 @@ def edit_income_categry(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -137,6 +140,7 @@ def add_income_names(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -178,6 +182,7 @@ def edit_income_names(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -250,6 +255,7 @@ def add_income_details(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -310,6 +316,7 @@ def edit_income_details(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -506,6 +513,7 @@ def income_details_filter(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:

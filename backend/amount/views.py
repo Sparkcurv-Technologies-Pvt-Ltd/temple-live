@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from django.shortcuts import render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -27,6 +28,7 @@ def bank_transaction(request):
     print(f'token---{rejin}')
     rejin=token_checking(request)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -159,6 +161,7 @@ def edit_bank_transaction(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -535,6 +538,7 @@ def get_bank_details(request):
     print(f'token---{rejin}')
     rejin=token_checking(request)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -565,6 +569,7 @@ def get_cash_details(request):
     print(f'token---{rejin}')
     rejin=token_checking(request)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -598,6 +603,7 @@ def cash_tranfer_statement(request):
         print(f'token---{rejin}')
         rejin=token_checking(request)
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -641,6 +647,7 @@ def bank_statement(request):
         print(f'token---{rejin}')
         rejin=token_checking(request)
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -692,6 +699,7 @@ def get_detail_cash_borrowedlist(request):
         print(f'token---{rejin}')
         rejin=token_checking(request)
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -719,6 +727,7 @@ def get_bank_details_filter(request,pk):
     print(f'token---{rejin}')
     rejin=token_checking(request)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:

@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,6 +21,7 @@ def get_sangam_members(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -72,6 +74,7 @@ def add_sangam_name(request):
     if request.method =='POST':   
 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -113,6 +116,7 @@ def edit_sangam_name(request,pk):
     
     elif request.method == 'PUT': 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -141,6 +145,7 @@ def edit_sangam_name(request,pk):
            
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -168,6 +173,7 @@ def add_sangam_details(request):
         management=ManagementDetails.objects.all().first()
     if request.method =='POST':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -220,6 +226,7 @@ def edit_sangam_details(request,pk):
     
     elif request.method == 'PUT':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -268,6 +275,7 @@ def edit_sangam_details(request,pk):
            
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:

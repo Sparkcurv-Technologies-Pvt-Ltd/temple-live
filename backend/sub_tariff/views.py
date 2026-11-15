@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -33,6 +34,7 @@ def add_tariff_details(request):
         
     if request.method =='POST': 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -141,6 +143,7 @@ def edit_tariff_details(request,pk):
     
     elif request.method == 'PUT': 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -247,6 +250,7 @@ def edit_tariff_details(request,pk):
     
     elif request.method == 'PATCH': 
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:
@@ -277,6 +281,7 @@ def edit_tariff_details(request,pk):
                 
     elif request.method == 'DELETE':
         get_role=rejin.user_role
+        perm = NO_PERMISSION
         if rejin.my_role!=None:
             permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
             if permiss:

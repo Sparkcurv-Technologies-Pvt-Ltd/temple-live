@@ -2203,7 +2203,10 @@ export const Collection = ({ trigger }) => {
                         disabled
                       />
                     </Col>}
-                  {intCategory!== "Interest with capital" &&
+                  {/* Penalty fields are shown for "Interest with capital" too:
+                      these loans DO accrue penalties (day-20 rule), and with the
+                      fields hidden the penalty could never be collected. */}
+                  {
                     <Col span={24} md={6}>
                       <CustomInput
                         label={"Penalty Amt"}
@@ -2221,7 +2224,7 @@ export const Collection = ({ trigger }) => {
                         max={interestMax}
                       />
                     </Col>}
-                  {intCategory !== "Interest with capital" &&
+                  {
                     <Col span={24} md={6}>
                       <CustomInputNumber
                         label={"Penalty Pay Amt"}

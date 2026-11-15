@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -34,6 +35,7 @@ def add_death_details(request):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -137,6 +139,7 @@ def edit_death_details(request,pk):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:

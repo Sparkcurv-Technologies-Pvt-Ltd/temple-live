@@ -201,11 +201,19 @@ const AddUsers = ({ closee, updateUserList, Usertrigger }) => {
         return response.data;
       })
       .catch(function (error) {
-        if (error.response.status === 400){
-          toast.warn(error.response.data.mobile_number[0])
-        }
-        else if(error.response.status === 400){
-          toast.error(error.response.data?.email[0]);
+        // A 400 can be about mobile_number OR email (both used to share one
+        // unreachable else-if, and reading mobile_number[0] crashed when the
+        // error was about email). Show whichever field error came back.
+        if (error?.response?.status === 400) {
+          const errs = error.response.data || {};
+          const msg = errs.mobile_number?.[0] || errs.email?.[0] || errs.message;
+          if (msg) {
+            toast.warn(msg);
+          } else {
+            return errorHandler(error);
+          }
+        } else {
+          return errorHandler(error);
         }
       });
   };

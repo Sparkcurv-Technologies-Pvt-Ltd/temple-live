@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -225,6 +226,7 @@ def view_family_link_to_ancester(request,pk):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -270,6 +272,7 @@ def alive_family_and_the_members(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -299,6 +302,7 @@ def add_family(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -506,6 +510,7 @@ def edit_family(request,pk):
     if not rejin.is_active:
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -930,9 +935,9 @@ def family_group_view(request):
     print(f'token---{rejin}')
     # get_role=rejin.user_role
     # if rejin.my_role!=None:
-    #     permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+    #     permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
     #     if permiss:
-    #         perm=Permisions.objects.get(id=rejin.my_role.id)
+    #         perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management=ManagementDetails.objects.all()
     if not check_management:
         dict6={}
@@ -971,6 +976,7 @@ def ansester_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -998,6 +1004,7 @@ def ansester_view_edit_family(request,pk):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1024,6 +1031,7 @@ def family_mem_nodeath_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1063,6 +1071,7 @@ def members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1100,6 +1109,7 @@ def death_members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1134,6 +1144,7 @@ def marriage_remove_members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1168,6 +1179,7 @@ def alive_members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1201,6 +1213,7 @@ def leaving_members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1235,6 +1248,7 @@ def tariff_members_view(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
         permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
@@ -1401,9 +1415,9 @@ def marriage_groom_family_view(request):
     print(f'token---{rejin}')
     # get_role=rejin.user_role
     # if rejin.my_role!=None:
-    #     permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+    #     permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
     #     if permiss:
-    #         perm=Permisions.objects.get(id=rejin.my_role.id)
+    #         perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management=ManagementDetails.objects.all()
     if not check_management:
         dict6={}
@@ -1437,9 +1451,9 @@ def marriage_bride_family_view(request):
     print(f'token---{rejin}')
     # get_role=rejin.user_role
     # if rejin.my_role!=None:
-    #     permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+    #     permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
     #     if permiss:
-    #         perm=Permisions.objects.get(id=rejin.my_role.id)
+    #         perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management=ManagementDetails.objects.all()
     if not check_management:
         dict6={}
@@ -1476,9 +1490,9 @@ def ancestor_tree_view(request,pk):
     print(f'token---{rejin}')
     # get_role=rejin.user_role
     # if rejin.my_role!=None:
-    #     permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+    #     permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
     #     if permiss:
-    #         perm=Permisions.objects.get(id=rejin.my_role.id)
+    #         perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management=ManagementDetails.objects.all()
     if not check_management:
         dict6={}

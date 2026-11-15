@@ -1,3 +1,4 @@
+from permisions.utils import NO_PERMISSION
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -159,10 +160,11 @@ def add_chit_fund(request):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
    
     if request.method =='POST':
         if get_role=="User" and perm.chit_fund_add ==True or get_role=="Admin" or rejin.is_superuser == True: 
@@ -303,10 +305,11 @@ def edit_chit_fund(request,pk):
         management=ManagementDetails.objects.all().first()  
         
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
             
     try:
         customer = ChitFundsDetails.objects.get(pk=pk,management_profile=management)  
@@ -568,10 +571,11 @@ def add_chit_fund_investors(request):
     else:
         management=ManagementDetails.objects.all().first()
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
 
     if request.method =='POST': 
         if get_role=="User" and perm.chit_fund_add ==True or get_role=="Admin" or rejin.is_superuser == True: 
@@ -637,10 +641,11 @@ def edit_chit_fund_investors(request,pk):
         management=ManagementDetails.objects.all().first()
         
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     try:
         customer = ChitFundInvesters.objects.get(pk=pk)  
         old=customer.investment_amt
@@ -768,10 +773,11 @@ def add_chit_fund_settlement_application_details(request):
         management=ManagementDetails.objects.all().first()
         
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
             
     if request.method =='POST': 
         if get_role=="User" and perm.chit_fund_add ==True or get_role=="Admin" or rejin.is_superuser == True:    
@@ -864,10 +870,11 @@ def edit_chit_fund_settlement_application_details(request,pk):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     try:
         customer = ChitFundsettleAplication.objects.get(pk=pk,management_profile=management)  
     except ChitFundsettleAplication.DoesNotExist:
@@ -966,10 +973,11 @@ def chit_fund_settlement_application_get(request):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
 
     if request.method == 'GET':
         cal_today=datetime.datetime.now()
@@ -1004,10 +1012,11 @@ def add_chit_fund_settlement(request):
         return Response({"message":"Not Authorized Please Contact Admin"},status=status.HTTP_401_UNAUTHORIZED)   
     print(f'token---{rejin}')
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     check_management=ManagementDetails.objects.all()
     if not check_management:
         dict6={}
@@ -1100,10 +1109,11 @@ def edit_chit_fund_settlement(request,pk):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
     try:
         customer = ChitFundSettlement.objects.get(pk=pk,management_profile=management)  
         # date_check=customer.created_at__date
@@ -1264,10 +1274,11 @@ def add_chitfund_distribution(request):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
 
     if request.method =='POST':
         if get_role=="User" and perm.chit_fund_add ==True or get_role=="Admin" or rejin.is_superuser == True:     
@@ -1598,10 +1609,11 @@ def chitfund_only_profit_distribution(request):
         management=ManagementDetails.objects.all().first()
     
     get_role=rejin.user_role
+    perm = NO_PERMISSION
     if rejin.my_role!=None:
-        permiss=Permisions.objects.filter(id=rejin.my_role.id).first()
+        permiss=Permisions.objects.filter(role_link_id=rejin.my_role.id).first()
         if permiss:
-            perm=Permisions.objects.get(id=rejin.my_role.id)
+            perm=Permisions.objects.get(role_link_id=rejin.my_role.id)
 
     if request.method =='POST':
         if get_role=="User" and perm.chit_fund_add ==True or get_role=="Admin" or rejin.is_superuser == True:     
