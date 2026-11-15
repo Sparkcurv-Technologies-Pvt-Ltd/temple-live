@@ -207,6 +207,14 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
     is_capital = (record.interest_category or "").lower() == "interest with capital"
     penalty_on = True if record.penalty_enabled is None else bool(record.penalty_enabled)
 
+    # Pre-sweep: settle the day-20 penalty/fold of the LATEST already-charged
+    # month (charged on an earlier call, between its 5th and 19th) BEFORE
+    # charging any new month. Without this, the next month was charged
+    # first, and the old month's day-20 check then saw the NEW month's
+    # interest in intrest_balance_amt -- penalising/folding money that was
+    # not yet due, even when the old month had been paid on time.
+    applied.extend(_sweep_charged_months(record, bal, is_capital, penalty_on))
+
     while True:
         charge_day = datetime.date(y, m, 5)
         if charge_day > today:
@@ -258,16 +266,33 @@ def _apply_for_record(record: PeopleInterestDetails) -> dict:
 
     # ---- Catch-all sweep: any "Interest" row whose day-20 has passed --
     # ---- but wasn't processed above (charged in an earlier call) ------
-    pending_charge_rows = InterestPeopleReport.objects.filter(
-        interest=record, type_choice="Interest",
-    ).order_by("reportdate")
-
-    for charge_row in pending_charge_rows:
-        applied.extend(
-            _process_penalty_fold_for_month(record, bal, charge_row, is_capital, penalty_on)
-        )
+    applied.extend(_sweep_charged_months(record, bal, is_capital, penalty_on))
 
     return {"interest_id": record.id, "applied_months": applied}
+
+
+def _sweep_charged_months(record, bal, is_capital: bool, penalty_on: bool) -> list:
+    """Run the idempotent penalty/fold step for the LATEST "Interest"
+    charge row only.
+
+    A month's day-20 check is only meaningful while it is still the most
+    recent charge: `intrest_balance_amt` is a single running bucket, so once
+    a newer month has been charged it holds THAT month's interest. Checking
+    an older month afterwards wrongly penalises and folds the newer month's
+    money under the older date (seen live on INT287: Oct paid on Oct 11,
+    yet a Penalty + Capital Fold dated Oct 20 were created from November's
+    charge). Every older month is already handled inside the main loop,
+    which processes each month's day-20 before charging the next.
+    """
+    latest = (
+        InterestPeopleReport.objects
+        .filter(interest=record, type_choice="Interest")
+        .order_by("-reportdate")
+        .first()
+    )
+    if latest is None:
+        return []
+    return _process_penalty_fold_for_month(record, bal, latest, is_capital, penalty_on)
 
 
 def _installment_delta(record: PeopleInterestDetails):

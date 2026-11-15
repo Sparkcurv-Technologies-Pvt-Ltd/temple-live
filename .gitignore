@@ -226,3 +226,9 @@ backend/temple_proj/settings/test.py
 # Environment secrets
 .env
 .env.*
+
+# local backups / runtime files
+*.bak
+*.bak_*
+.my_tasks_scheduler.lock
+backend/0

@@ -562,16 +562,23 @@ def add_collection_details(request):
                             _int_pay = float(temp_family.interst_amount or 0)
                             _prin_settled = _pay + _discount
 
-                            festival_get.principal_paid = float(festival_get.principal_paid) + _prin_settled
+                            # Owner rule (Oct 2026): interest paid beyond the
+                            # current intrest_balance_amt is an early principal
+                            # payment (same as the interest-only branch), not
+                            # silently discarded. Matters most for "Interest
+                            # with capital" loans, whose interest balance is
+                            # folded to 0 on the 20th.
+                            _int_balance_before = float(festival_get.intrest_balance_amt or 0)
+                            _int_applied = min(_int_pay, _int_balance_before)
+                            _int_overflow = max(0.0, _int_pay - _int_balance_before)
+
+                            festival_get.principal_paid = float(festival_get.principal_paid) + _prin_settled + _int_overflow
                             festival_get.principal_balance = max(
                                 0.0,
-                                float(festival_get.principal_balance) - _prin_settled,
+                                float(festival_get.principal_balance) - _prin_settled - _int_overflow,
                             )
-                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_pay
-                            festival_get.intrest_balance_amt = max(
-                                0.0,
-                                float(festival_get.intrest_balance_amt) - _int_pay,
-                            )
+                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_applied
+                            festival_get.intrest_balance_amt = max(0.0, _int_balance_before - _int_applied)
                             festival_get.penalty_paid_amt = float(festival_get.penalty_paid_amt) + _pen_pay
                             festival_get.penalty_balance_amt = max(
                                 0.0,
@@ -737,11 +744,21 @@ def add_collection_details(request):
                             _int_pay = float(temp_family.interst_amount or 0)
                             _pen_settled = _pen_pay + _discount
 
-                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_pay
-                            festival_get.intrest_balance_amt = max(
-                                0.0,
-                                float(festival_get.intrest_balance_amt) - _int_pay,
-                            )
+                            # Owner rule (Oct 2026): overflow beyond the
+                            # outstanding interest goes to principal (same as
+                            # the Management Interest branch).
+                            _int_balance_before = float(festival_get.intrest_balance_amt or 0)
+                            _int_applied = min(_int_pay, _int_balance_before)
+                            _int_overflow = max(0.0, _int_pay - _int_balance_before)
+
+                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_applied
+                            festival_get.intrest_balance_amt = max(0.0, _int_balance_before - _int_applied)
+                            if _int_overflow > 0:
+                                festival_get.principal_paid = float(festival_get.principal_paid) + _int_overflow
+                                festival_get.principal_balance = max(
+                                    0.0,
+                                    float(festival_get.principal_balance) - _int_overflow,
+                                )
                             festival_get.penalty_paid_amt = float(festival_get.penalty_paid_amt) + _pen_settled
                             festival_get.penalty_balance_amt = max(
                                 0.0,
@@ -771,16 +788,23 @@ def add_collection_details(request):
                             _int_pay = float(temp_family.interst_amount or 0)
                             _prin_settled = _pay + _discount
 
-                            festival_get.principal_paid = float(festival_get.principal_paid) + _prin_settled
+                            # Owner rule (Oct 2026): interest paid beyond the
+                            # current intrest_balance_amt is an early principal
+                            # payment (same as the interest-only branch), not
+                            # silently discarded. Matters most for "Interest
+                            # with capital" loans, whose interest balance is
+                            # folded to 0 on the 20th.
+                            _int_balance_before = float(festival_get.intrest_balance_amt or 0)
+                            _int_applied = min(_int_pay, _int_balance_before)
+                            _int_overflow = max(0.0, _int_pay - _int_balance_before)
+
+                            festival_get.principal_paid = float(festival_get.principal_paid) + _prin_settled + _int_overflow
                             festival_get.principal_balance = max(
                                 0.0,
-                                float(festival_get.principal_balance) - _prin_settled,
+                                float(festival_get.principal_balance) - _prin_settled - _int_overflow,
                             )
-                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_pay
-                            festival_get.intrest_balance_amt = max(
-                                0.0,
-                                float(festival_get.intrest_balance_amt) - _int_pay,
-                            )
+                            festival_get.intrest_paid_amt = float(festival_get.intrest_paid_amt) + _int_applied
+                            festival_get.intrest_balance_amt = max(0.0, _int_balance_before - _int_applied)
                             festival_get.penalty_paid_amt = float(festival_get.penalty_paid_amt) + _pen_pay
                             festival_get.penalty_balance_amt = max(
                                 0.0,
