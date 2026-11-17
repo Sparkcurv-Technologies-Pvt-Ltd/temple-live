@@ -458,8 +458,13 @@ def add_interest_given_details(request):
                                 inter_bal.interest_apply_date=checking_day
                                 inter_bal.save()
                                 
-                    elif interest_type=="Chit fund Interest":        
-                       
+                    # Same exclusion as the Management branch above: Installment
+                    # Interest already includes its interest in the fixed
+                    # installment total, so a back-dated chit installment loan
+                    # must NOT get a separate catch-up "Interest" row (this
+                    # added a spurious +interest_amt to e.g. INT318 on live).
+                    elif interest_type=="Chit fund Interest" and inter_check.interest_category != "Installment Interest":
+
                             checking_dates=temp_family.interest_date + relativedelta(months=1)
                             checking_day=datetime.date(checking_dates.year,checking_dates.month,1)
                             checking_day_penalty=datetime.date(checking_dates.year,checking_dates.month,20)
